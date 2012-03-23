@@ -30,14 +30,15 @@ globalEnv = Map.fromList [ ("quote", SPure quote)
 
 eval :: Sexp -> Env -> (Val, Env)
 eval (List lst) env =
-    let f = eval (lst !! 0)
+    let (f, newEnv) = eval (lst !! 0) env
         args = drop 1 lst
-    in apply f args env
+    in apply f args newEnv
 eval (Atom atom) env =
     case Map.lookup atom env of
         Just v -> (v, env)
         Nothing -> (undefinedVal, env)
 
 
+apply :: Val -> [Sexp] -> Env -> (Val, Env)
 apply = undefined
 
