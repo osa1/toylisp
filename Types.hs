@@ -2,9 +2,16 @@ module Types where
 
 import qualified Data.Map as Map
 
+-- syntax
 data Sexp = List [Sexp] | Atom String deriving (Show)
 
 type Env = Map.Map String Func
-data Func = SForm (Sexp -> Env -> (Val, Env)) | Func ([Val] -> Env -> (Val, Env))
+
+data Func = SForm (Sexp -> Env -> (Val, Env)) -- cond like forms
+          | Func (Params Val -> Env -> (Val, Env)) -- ordinary functions, with optional side-effects(defun)
+          | SPure (Sexp -> Val)               -- macros?? quote like forms
+          | Pure (Params Val -> Val)                 -- pure functions, car, cdr, etc
+
+data Params a = P1 a | P2 a a | P3 a a a
 
 data Val = VSymbol String | VList [Val] deriving (Show)
