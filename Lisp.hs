@@ -35,10 +35,36 @@ eval (List lst) env =
     in apply f args newEnv
 eval (Atom atom) env =
     case Map.lookup atom env of
-        Just v -> (v, env)
+        Just v  -> (v, env)
         Nothing -> (undefinedVal, env)
 
+evalList :: [Sexp] -> Env -> ([Val], Env)
+evalList = undefined
 
 apply :: Val -> [Sexp] -> Env -> (Val, Env)
-apply = undefined
+apply (VFunc func) exprs env =
+    case func of
+
+        -- (Params Sexp -> Env -> (Val, Env))
+        (SForm f) -> f (toParams exprs) env
+
+        -- (Params Val -> Env -> (Val, Env))
+        (Func f)  ->
+            let (vals, lastEnv) = evalList exprs env
+            in f (toParams vals) lastEnv
+
+        -- (Params Val -> Val)
+        (Pure f)  ->
+            let (vals, env) = evalList exprs env
+            in (f (toParams vals), env)
+
+        -- (Params Sexp -> Val)
+        (SPure f) -> (f (toParams exprs), env)
+
+toParams :: [a] -> Params a
+toParams [a,b] = P2 a b
+toParams [a]   = P1 a
+
+
+
 
