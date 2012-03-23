@@ -38,8 +38,16 @@ eval (Atom atom) env =
         Just v  -> (v, env)
         Nothing -> (undefinedVal, env)
 
+
 evalList :: [Sexp] -> Env -> ([Val], Env)
-evalList = undefined
+evalList sexps env =
+    iter sexps env []
+    where iter sexps env vals =
+            if (length sexps) == 0
+               then (vals, env)
+               else let (exp, newEnv) = eval (head sexps) env
+                    in iter (tail sexps) newEnv (vals ++ [exp])
+
 
 apply :: Val -> [Sexp] -> Env -> (Val, Env)
 apply (VFunc func) exprs env =
