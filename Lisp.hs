@@ -3,6 +3,9 @@ module Lisp where
 import Types
 import Parser
 
+import Text.ParserCombinators.Parsec (parse)
+import Debug.Trace
+
 import qualified Data.Map as Map
 
 undefinedVal = VSymbol "undefined"
@@ -22,24 +25,28 @@ cons (P2 v1 v2) = case v2 of
                     (VList lst) -> VList (v1:lst)
                     otherwise   -> VList [v1, v2]
 
-globalEnv = Map.fromList [ ("quote", SPure quote)
-                         , ("car", Pure car)
-                         , ("cdr", Pure cdr)
-                         , ("cons", Pure cons)
+globalEnv :: Map.Map String Val
+globalEnv = Map.fromList [ ("quote", VFunc $ SPure quote)
+                         , ("car", VFunc $ Pure car)
+                         , ("cdr", VFunc $ Pure cdr)
+                         , ("cons", VFunc $ Pure cons)
                          ]
 
 eval :: Sexp -> Env -> (Val, Env)
+eval a b | trace ("eval " ++ show a) False = undefined
 eval (List lst) env =
     let (f, newEnv) = eval (lst !! 0) env
         args = drop 1 lst
     in apply f args newEnv
 eval (Atom atom) env =
     case Map.lookup atom env of
-        Just v  -> (v, env)
-        Nothing -> (undefinedVal, env)
+        Just v  -> trace ("eval returned " ++ show v) (v, env)
+        Nothing -> trace "eval error" (undefinedVal, env)
 
 
+-- still easier than state monad lol
 evalList :: [Sexp] -> Env -> ([Val], Env)
+evalList a b | trace ("evalList " ++ show a) False = undefined
 evalList sexps env =
     iter sexps env []
     where iter sexps env vals =
@@ -50,6 +57,7 @@ evalList sexps env =
 
 
 apply :: Val -> [Sexp] -> Env -> (Val, Env)
+apply a b c | trace ("apply " ++ show a ++ " exprs: " ++ show b) False = undefined
 apply (VFunc func) exprs env =
     case func of
 
@@ -73,6 +81,15 @@ toParams :: [a] -> Params a
 toParams [a,b] = P2 a b
 toParams [a]   = P1 a
 
-
+repl :: IO ()
+repl = do
+    putStr "> "
+    line <- getLine
+    case parse sexp "" line of
+        Right r -> let (val, env) = eval r globalEnv
+                   in do putStrLn $ show val
+                         repl
+        Left r -> putStrLn "error"
+    repl
 
 
