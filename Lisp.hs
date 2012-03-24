@@ -33,20 +33,18 @@ globalEnv = Map.fromList [ ("quote", VFunc $ SPure quote)
                          ]
 
 eval :: Sexp -> Env -> (Val, Env)
-eval a b | trace ("eval " ++ show a) False = undefined
 eval (List lst) env =
     let (f, newEnv) = eval (lst !! 0) env
         args = drop 1 lst
     in apply f args newEnv
 eval (Atom atom) env =
     case Map.lookup atom env of
-        Just v  -> trace ("eval returned " ++ show v) (v, env)
-        Nothing -> trace "eval error" (undefinedVal, env)
+        Just v  -> (v, env)
+        Nothing -> (undefinedVal, env)
 
 
 -- still easier than state monad lol
 evalList :: [Sexp] -> Env -> ([Val], Env)
-evalList a b | trace ("evalList " ++ show a) False = undefined
 evalList sexps env =
     iter sexps env []
     where iter sexps env vals =
@@ -57,7 +55,14 @@ evalList sexps env =
 
 
 apply :: Val -> [Sexp] -> Env -> (Val, Env)
-apply a b c | trace ("apply " ++ show a ++ " exprs: " ++ show b) False = undefined
+--apply a b c | trace ("apply " ++ show a ++ " exprs: " ++ show b) False = undefined
+--apply (VFunc func) exprs env =
+--    case func of
+--        (Pure f) ->
+--            let (vals, newEnv) = evalList exprs env
+--                r = trace ("vals: " ++ show vals) $ f (toParams vals)
+--            in (r, globalEnv)
+--        otherwise -> trace "otherwise" (VSymbol "ok", globalEnv)
 apply (VFunc func) exprs env =
     case func of
 
@@ -71,8 +76,8 @@ apply (VFunc func) exprs env =
 
         -- (Params Val -> Val)
         (Pure f)  ->
-            let (vals, env) = evalList exprs env
-            in (f (toParams vals), env)
+            let (vals, env1) = evalList exprs env
+            in (f (toParams vals), env1)
 
         -- (Params Sexp -> Val)
         (SPure f) -> (f (toParams exprs), env)
@@ -92,4 +97,5 @@ repl = do
         Left r -> putStrLn "error"
     repl
 
+main = repl
 
