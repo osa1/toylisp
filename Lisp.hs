@@ -40,8 +40,20 @@ cond :: Params Sexp -> Env -> (Val, Env)
 cond = undefined
 
 lambda :: Params Sexp -> Val
-lambda (P2 params expr) = undefined
+lambda (P2 (List params) expr) =
+    VFunc (Func f)
+    where
+        f :: (Params Val -> Env -> (Val, Env))
+        --f = undefined
+        f = (\args env ->
+                let argList = toList args
+                    --(argVals, newEnv) = evalList argList env
+                    funcEnv = Env { env = Map.fromList (zip (map atomStr params) argList)
+                                  , parentEnv = Just env }
+                in eval expr funcEnv)
 
+atomStr :: Sexp -> String
+atomStr (Atom s) = s
 
 globalEnv :: Env
 globalEnv = Env (Map.fromList [ ("quote", VFunc $ SPure quote)
@@ -60,7 +72,7 @@ envLookup key (Env envTable parentEnv) =
       Just v  -> Just v
       Nothing ->
         case parentEnv of
-          Just e -> envLookup key e
+          Just e  -> envLookup key e
           Nothing -> Nothing
 
 eval :: Sexp -> Env -> (Val, Env)
@@ -74,7 +86,7 @@ eval (Atom atom) env =
         Nothing -> (undefinedVal, env)
 
 
--- still easier than state monad lol
+-- still easier than working with state monad lol
 evalList :: [Sexp] -> Env -> ([Val], Env)
 evalList sexps env =
     iter sexps env []
@@ -86,14 +98,6 @@ evalList sexps env =
 
 
 apply :: Val -> [Sexp] -> Env -> (Val, Env)
---apply a b c | trace ("apply " ++ show a ++ " exprs: " ++ show b) False = undefined
---apply (VFunc func) exprs env =
---    case func of
---        (Pure f) ->
---            let (vals, newEnv) = evalList exprs env
---                r = trace ("vals: " ++ show vals) $ f (toParams vals)
---            in (r, globalEnv)
---        otherwise -> trace "otherwise" (VSymbol "ok", globalEnv)
 apply (VFunc func) exprs env =
     case func of
 
@@ -116,6 +120,10 @@ apply (VFunc func) exprs env =
 toParams :: [a] -> Params a
 toParams [a,b] = P2 a b
 toParams [a]   = P1 a
+
+toList :: Params a -> [a]
+toList (P1 a) = [a]
+toList (P2 a b) = [a, b]
 
 repl :: IO ()
 repl = do
