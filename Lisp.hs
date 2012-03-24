@@ -51,6 +51,7 @@ lambda (P2 (List params) expr) =
                     funcEnv = Env { env = Map.fromList (zip (map atomStr params) argList)
                                   , parentEnv = Just env }
                 in eval expr funcEnv)
+lambda _ = undefined
 
 atomStr :: Sexp -> String
 atomStr (Atom s) = s
@@ -63,6 +64,7 @@ globalEnv = Env (Map.fromList [ ("quote", VFunc $ SPure quote)
                               , ("equal", VFunc $ Pure equal)
                               , ("atom", VFunc $ Pure atom)
                               , ("cond", VFunc $ SForm cond)
+                              , ("lambda", VFunc $ SPure lambda)
                               ])
                  Nothing
 
