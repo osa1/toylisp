@@ -1,6 +1,7 @@
 module Types where
 
 import qualified Data.Map as Map
+import Data.List (intercalate)
 
 -- syntax
 data Sexp = List [Sexp] | Atom String deriving (Show)
@@ -15,7 +16,12 @@ data Func = SForm (Params Sexp -> Env -> (Val, Env)) -- cond like forms
 data Params a = P1 a | P2 a a -- | P3 a a a
     deriving (Show)
 
-data Val = VSymbol String | VList [Val] | VFunc Func deriving (Show)
+data Val = VSymbol String | VList [Val] | VFunc Func
+
+instance Show Val where
+    show (VSymbol sym) = sym
+    show (VList vals) = "(" ++ intercalate " " (map show vals) ++ ")"
+    show (VFunc func) = "VFunc " ++ show func
 
 instance Show Func where
     show (SForm _) = "SForm"
