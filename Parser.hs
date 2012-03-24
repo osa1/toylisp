@@ -1,4 +1,7 @@
-module Parser where
+module Parser
+( sexp
+, sexps
+) where
 
 import Text.ParserCombinators.Parsec
 import Types
