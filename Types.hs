@@ -6,7 +6,10 @@ import Data.List (intercalate)
 -- syntax
 data Sexp = List [Sexp] | Atom String deriving (Show)
 
-type Env = Map.Map String Val
+type EnvTable = Map.Map String Val
+data Env = Env { env       :: EnvTable
+               , parentEnv :: Maybe Env
+               }
 
 data Func = SForm (Params Sexp -> Env -> (Val, Env)) -- cond like forms
           | Func (Params Val -> Env -> (Val, Env))   -- ordinary functions, with optional side-effects(defun)

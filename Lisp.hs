@@ -9,6 +9,8 @@ import Debug.Trace
 import qualified Data.Map as Map
 
 undefinedVal = VSymbol "undefined"
+t = VSymbol "T"
+nil = VList []
 
 quote :: Params Sexp -> Val
 quote (P1 (List sexps))  = VList $ map (quote . P1) sexps
@@ -25,12 +27,41 @@ cons (P2 v1 v2) = case v2 of
                     (VList lst) -> VList (v1:lst)
                     otherwise   -> VList [v1, v2]
 
-globalEnv :: Map.Map String Val
-globalEnv = Map.fromList [ ("quote", VFunc $ SPure quote)
-                         , ("car", VFunc $ Pure car)
-                         , ("cdr", VFunc $ Pure cdr)
-                         , ("cons", VFunc $ Pure cons)
-                         ]
+equal :: Params Val -> Val
+equal (P2 v1 v2) = case v1 == v2 of
+                     True  -> t
+                     False -> nil
+
+atom :: Params Val -> Val
+atom (P1 (VSymbol v)) = t
+atom _                = nil
+
+cond :: Params Sexp -> Env -> (Val, Env)
+cond = undefined
+
+lambda :: Params Sexp -> Val
+lambda (P2 params expr) = undefined
+
+
+globalEnv :: Env
+globalEnv = Env (Map.fromList [ ("quote", VFunc $ SPure quote)
+                              , ("car", VFunc $ Pure car)
+                              , ("cdr", VFunc $ Pure cdr)
+                              , ("cons", VFunc $ Pure cons)
+                              , ("equal", VFunc $ Pure equal)
+                              , ("atom", VFunc $ Pure atom)
+                              , ("cond", VFunc $ SForm cond)
+                              ])
+                 Nothing
+
+envLookup :: String -> Env -> Maybe Val
+envLookup key (Env envTable parentEnv) =
+    case Map.lookup key envTable of
+      Just v  -> Just v
+      Nothing ->
+        case parentEnv of
+          Just e -> envLookup key e
+          Nothing -> Nothing
 
 eval :: Sexp -> Env -> (Val, Env)
 eval (List lst) env =
@@ -38,7 +69,7 @@ eval (List lst) env =
         args = drop 1 lst
     in apply f args newEnv
 eval (Atom atom) env =
-    case Map.lookup atom env of
+    case envLookup atom env of
         Just v  -> (v, env)
         Nothing -> (undefinedVal, env)
 
