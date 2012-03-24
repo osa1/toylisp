@@ -18,6 +18,11 @@ data Params a = P1 a | P2 a a -- | P3 a a a
 
 data Val = VSymbol String | VList [Val] | VFunc Func
 
+instance Eq Val where
+    (VSymbol a) == (VSymbol b) = a == b
+    (VList a) == (VList b) = all (\(a,b) -> a == b) (zip a b)
+    _ == _ = False
+
 instance Show Val where
     show (VSymbol sym) = sym
     show (VList vals) = "(" ++ intercalate " " (map show vals) ++ ")"
