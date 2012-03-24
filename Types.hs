@@ -11,7 +11,7 @@ data Env = Env { env       :: EnvTable
                , parentEnv :: Maybe Env
                }
 
-data Func = SForm (Params Sexp -> Env -> (Val, Env)) -- cond like forms
+data Func = SForm (Params Sexp -> Env -> (Val, Env)) -- cond-like forms
           | Func (Params Val -> Env -> (Val, Env))   -- ordinary functions, with optional side-effects(defun)
           | SPure (Params Sexp -> Val)               -- macros?? quote-like forms
           | Pure (Params Val -> Val)                 -- pure functions, car, cdr, etc
