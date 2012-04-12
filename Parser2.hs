@@ -57,7 +57,7 @@ parseNumber =
 
 
 parseExpr :: Parser LispVal
-parseExpr = parseAtom <|> parseString <|> parseNumber <|> parseChar
+parseExpr = try parseNumber <|> parseString <|> parseAtom <|> parseChar
 
 readExpr :: String -> String
 readExpr input = case parse parseExpr "lisp" input of
