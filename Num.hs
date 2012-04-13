@@ -22,7 +22,6 @@ numList =  [ ('0', 0)
            , ('f', 15)
            ]
 
-
 nlookup :: Char -> Int
 nlookup n = case lookup (toLower n) numList of
     Nothing -> error $ "can't convert " ++ show n ++ " to Int."
@@ -33,8 +32,7 @@ toInt num base = foldr r 0 (zip num $ reverse [0..(length num)])
     where r :: (Char, Int) -> Int -> Int
           r (c, p) e = e + ((nlookup c)*(base^(p-1)))
 
-
-toFloat :: String -> String -> Int -> Float
-toFloat i frac base = (fromIntegral (toInt i base) :: Float) + (foldl r 0 (zip frac [0..]))
-    where r :: Float -> (Char, Int) -> Float
-          r t (c, p) = t + (1/(fromIntegral (nlookup c) :: Float)**(fromIntegral p :: Float))
+--toFloat :: String -> String -> Int -> Float
+--toFloat i frac base = (fromIntegral (toInt i base) :: Float) + (foldl r 0 (zip frac [0..]))
+--    where r :: Float -> (Char, Int) -> Float
+--          r t (c, p) = t + (1/(fromIntegral (nlookup c) :: Float)**(fromIntegral p :: Float))
