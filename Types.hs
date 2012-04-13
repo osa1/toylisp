@@ -1,38 +1,13 @@
 module Types where
 
-import qualified Data.Map as Map
-import Data.List (intercalate)
 
--- syntax
-data Sexp = List [Sexp] | Atom String deriving (Show)
-
-type EnvTable = Map.Map String Val
-data Env = Env { env       :: EnvTable
-               , parentEnv :: Maybe Env
-               }
-
-data Func = SForm (Params Sexp -> Env -> (Val, Env)) -- cond-like forms
-          | Func (Params Val -> Env -> (Val, Env))   -- ordinary functions, with optional side-effects(defun)
-          | SPure (Params Sexp -> Val)               -- macros?? quote-like forms
-          | Pure (Params Val -> Val)                 -- pure functions, car, cdr, etc
-
-data Params a = P1 a | P2 a a -- | P3 a a a
+data LispVal = Atom String
+             | List [LispVal]
+             | DottedList [LispVal] LispVal
+             | Number Integer
+             | String String
+             | Character Char
+             | Float Float
+             | Bool Bool
     deriving (Show)
 
-data Val = VSymbol String | VList [Val] | VFunc Func
-
-instance Eq Val where
-    (VSymbol a) == (VSymbol b) = a == b
-    (VList a) == (VList b) = all (\(a,b) -> a == b) (zip a b)
-    _ == _ = False
-
-instance Show Val where
-    show (VSymbol sym) = sym
-    show (VList vals) = "(" ++ intercalate " " (map show vals) ++ ")"
-    show (VFunc func) = "VFunc " ++ show func
-
-instance Show Func where
-    show (SForm _) = "SForm"
-    show (Func _)  = "Func"
-    show (SPure _) = "SPure"
-    show (Pure _)  = "Pure"
