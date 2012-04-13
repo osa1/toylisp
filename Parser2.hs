@@ -53,16 +53,29 @@ parseOct = do
   i <- many1 $ oneOf "01234576"
   return $ Number $ fromIntegral $ toInt i 8
 
+parseDec :: Parser LispVal
+parseDec = liftM (Number . fromIntegral . (flip toInt 10)) (many1 digit)
+
 parseHex :: Parser LispVal
 parseHex = do
   string "#x"
   i <- many1 $ oneOf "0123456789abcdef"
   return $ Number $ fromIntegral $ toInt i 16
 
-
-
 parseNumber :: Parser LispVal
-parseNumber = undefined
+parseNumber =
+      try (do i <- many1 $ oneOf "0123456789"
+              char '.'
+              f <- many1 $ oneOf "0123456789"
+              return $ (Float . fst . (!! 0) . readFloat) (i ++ "." ++ f))
+  <|> try parseHex
+  <|> try parseOct
+  <|> try parseBin
+  <|> try parseDec
+
+
+--parseNumber :: Parser LispVal
+--parseNumber = undefined
 --parseNumber =
 --    choice [ try $ (string "#b") >> liftM (Number . read) (many1 $ oneOf "01") -- TODO
 --           , try $ (string "#o") >> liftM (Number . fst . (!! 0) . readOct) (many1 $ oneOf "01234567")
@@ -72,7 +85,6 @@ parseNumber = undefined
 
 --           , liftM (Number . read) $ many1 digit
 --           ]
-
 
 
 -- ------------------------------------------------------
