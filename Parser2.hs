@@ -3,16 +3,10 @@ module Parser where
 import Control.Monad
 import System.Environment
 import Text.ParserCombinators.Parsec
-import Numeric (readHex, readOct)
+import Numeric (readHex, readOct, readFloat)
 
-data LispVal = Atom String
-             | List [LispVal]
-             | DottedList [LispVal] LispVal
-             | Number Integer
-             | String String
-             | Character Char
-             | Bool Bool
-    deriving (Show)
+import Types
+import Num
 
 symbol :: Parser Char
 symbol = oneOf "!$%&|*+-/:<=?>@^_~#"
@@ -44,15 +38,44 @@ parseAtom = do first <- letter <|> symbol
                  "#f" -> Bool False
                  _ -> Atom atom
 
-parseNumber :: Parser LispVal
---parseNumber = liftM (Number . read) $ many1 digit
-parseNumber =
-    choice [ try $ (string "#b") >> liftM (Number . read) (many1 $ oneOf "01") -- TODO
-           , try $ (string "#o") >> liftM (Number . fst . (!! 0) . readOct) (many1 $ oneOf "01234567")
-           , try $ (string "#x") >> liftM (Number . fst . (!! 0) . readHex) (many1 $ oneOf "0123456789abcdef")
-           , liftM (Number . read) $ many1 digit
-           ]
 
+-- Numeric types ----------------------------------------
+
+parseBin :: Parser LispVal
+parseBin = do
+  string "#b"
+  i <- many1 $ oneOf "01"
+  return $ Number $ fromIntegral $ toInt i 2
+
+parseOct :: Parser LispVal
+parseOct = do
+  string "#o"
+  i <- many1 $ oneOf "01234576"
+  return $ Number $ fromIntegral $ toInt i 8
+
+parseHex :: Parser LispVal
+parseHex = do
+  string "#x"
+  i <- many1 $ oneOf "0123456789abcdef"
+  return $ Number $ fromIntegral $ toInt i 16
+
+
+
+parseNumber :: Parser LispVal
+parseNumber = undefined
+--parseNumber =
+--    choice [ try $ (string "#b") >> liftM (Number . read) (many1 $ oneOf "01") -- TODO
+--           , try $ (string "#o") >> liftM (Number . fst . (!! 0) . readOct) (many1 $ oneOf "01234567")
+--           , try $ (string "#x") >> liftM (Number . fst . (!! 0) . readHex) (many1 $ oneOf "0123456789abcdef")
+--           , try $ do
+--               many1 digit
+
+--           , liftM (Number . read) $ many1 digit
+--           ]
+
+
+
+-- ------------------------------------------------------
 
 
 
