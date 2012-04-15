@@ -4,7 +4,9 @@ import Control.Monad
 import System.Environment
 import Text.ParserCombinators.Parsec
 import Numeric (readHex, readOct, readFloat)
+import Control.Monad.Error
 
+import Error
 import Types
 import Num
 
@@ -75,10 +77,34 @@ parseNumber =
 
 -- ------------------------------------------------------
 
-parseExpr :: Parser LispVal
-parseExpr = try parseNumber <|> parseString <|> parseAtom <|> parseChar
+parseList :: Parser LispVal
+parseList = liftM List $ parseExpr `sepBy` spaces
 
-readExpr :: String -> String
+parseDottedList :: Parser LispVal
+parseDottedList = do
+  head <- parseExpr `endBy` spaces
+  tail <- char '.' >> spaces >> parseExpr
+  return $ DottedList head tail
+
+parseQuoted :: Parser LispVal
+parseQuoted = do
+  char '\''
+  x <- parseExpr
+  return $ List [Atom "quote", x]
+
+
+parseExpr :: Parser LispVal
+parseExpr = parseNumber
+        <|> parseString
+        <|> parseAtom
+        <|> parseChar
+        <|> parseQuoted
+        <|> do char '('
+               x <- (try parseList) <|> parseDottedList
+               char ')'
+               return x
+
+readExpr :: String -> ThrowsError LispVal
 readExpr input = case parse parseExpr "lisp" input of
-    Left err -> "No match: " ++ show err
-    Right val -> "Found value"
+    Left err  -> throwError $ Parser err
+    Right val -> return val
