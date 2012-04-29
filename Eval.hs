@@ -177,6 +177,7 @@ eval _ val@(Number _) = return val
 eval _ val@(Bool _)   = return val
 eval _ (List [Atom "quote", val]) = return val
 
+eval env (Atom id) = getVar env id
 eval env (List [Atom "if", pred, conseq, alt]) = do
     result <- eval env pred
     case result of
