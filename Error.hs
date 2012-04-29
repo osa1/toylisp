@@ -1,6 +1,7 @@
 module Error
     ( LispError(..)
     , ThrowsError
+    , IOThrowsError
     , trapError
     , extractValue
     , throwError
