@@ -3,6 +3,8 @@ module Error
     , ThrowsError
     , IOThrowsError
     , trapError
+    , liftThrows
+    , runIOThrows
     , extractValue
     , throwError
     ) where
