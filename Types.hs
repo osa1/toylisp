@@ -1,5 +1,6 @@
 module Types where
 
+import Data.IORef
 
 data LispVal = Atom String
              | List [LispVal]
@@ -21,3 +22,8 @@ instance Show LispVal where
 
 unwordsList :: [LispVal] -> String
 unwordsList = unwords . map show
+
+type Env = IORef [(String, IORef LispVal)]
+
+nullEnv :: IO Env
+nullEnv = newIORef []
