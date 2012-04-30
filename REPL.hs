@@ -5,7 +5,6 @@ import System.Environment (getArgs)
 
 import IO hiding (try)
 import Eval
-import Error
 import Types
 import Parser
 

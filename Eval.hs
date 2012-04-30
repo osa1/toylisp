@@ -6,7 +6,6 @@ import Control.Monad (liftM)
 import Data.IORef
 import Control.Monad.IO.Class (liftIO)
 
-import Error
 import Types
 import Parser
 

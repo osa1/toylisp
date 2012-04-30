@@ -6,7 +6,6 @@ import Text.ParserCombinators.Parsec
 import Numeric (readHex, readOct, readFloat)
 import Control.Monad.Error
 
-import Error
 import Types
 import Num
 
