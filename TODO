@@ -1,1 +1,3 @@
 * Use Atom for func param names
+* Add "NoMonomorphismRestriction" pragma
+* Add "-Wall" compiler flag and fix warnings
