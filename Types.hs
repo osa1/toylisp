@@ -3,6 +3,9 @@ module Types
     , unwordsList
     , nullEnv
     , Env
+    , makeFunc
+    , makeNormalFunc
+    , makeVarargs
     , LispError(..)
     , ThrowsError
     , IOThrowsError
@@ -28,6 +31,13 @@ data LispVal = Atom String
              | Float Float
              | Bool Bool
 
+             | PrimitiveFunc ([LispVal] -> ThrowsError LispVal)
+             | Func { params :: [String]
+                    , vararg :: (Maybe String)
+                    , body :: [LispVal]
+                    , closure :: Env
+                    }
+
 instance Show LispVal where
     show (String contents) = "\"" ++ contents ++ "\""
     show (Atom name) = name
@@ -36,6 +46,18 @@ instance Show LispVal where
     show (Bool False) = "#f"
     show (List contents) = "(" ++ unwordsList contents ++ ")"
     show (DottedList head tail) = "(" ++ unwordsList head ++ " . " ++ show tail ++ ")"
+    show (PrimitiveFunc _) = "<primitive>"
+    show (Func args varargs body env) =
+        "(lambda (" ++ unwords (map show args) ++
+            (case varargs of
+                Nothing -> ""
+                Just arg -> " . " ++ arg ++ ") ...)")
+
+makeFunc :: (Maybe String) -> Env -> [LispVal] -> [LispVal] -> IOThrowsError LispVal
+makeFunc varargs env params body = return $ Func (map show params) varargs body env
+
+makeNormalFunc = makeFunc Nothing
+makeVarargs = makeFunc . Just . show
 
 unwordsList :: [LispVal] -> String
 unwordsList = unwords . map show
