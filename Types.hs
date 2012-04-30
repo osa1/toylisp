@@ -50,7 +50,7 @@ instance Show LispVal where
     show (Func args varargs body env) =
         "(lambda (" ++ unwords (map show args) ++
             (case varargs of
-                Nothing -> ""
+                Nothing -> ") ...)"
                 Just arg -> " . " ++ arg ++ ") ...)")
 
 makeFunc :: (Maybe String) -> Env -> [LispVal] -> [LispVal] -> IOThrowsError LispVal
