@@ -1,3 +1,5 @@
+{-# LANGUAGE NoMonomorphismRestriction #-}
+
 module Types
     ( LispVal(..)
     , unwordsList
