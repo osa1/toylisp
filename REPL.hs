@@ -28,8 +28,12 @@ evalString env expr =
 evalAndPrint :: Env -> String -> IO ()
 evalAndPrint env expr = evalString env expr >>= putStrLn
 
-runOne :: String -> IO ()
-runOne expr = primitiveBindings >>= flip evalAndPrint expr
+runOne :: [String] -> IO ()
+runOne args = do
+    env <- primitiveBindings >>= flip bindVars [("args", List $ map String $ drop 1 args)]
+    r <- runIOThrows $ liftM show $ eval env (List [Atom "load", String (args !! 0)])
+    hPutStrLn stderr r
+--runOne expr = primitiveBindings >>= flip evalAndPrint expr
 
 until_ :: Monad m => (a -> Bool) -> m a -> (a -> m ()) -> m ()
 until_ pred prompt action = do
@@ -45,7 +49,6 @@ runRepl = primitiveBindings >>= until_ (== "quit") (readPrompt "λ> ") . evalAnd
 main :: IO ()
 main = do
     args <- getArgs
-    case length args of
-        0 -> runRepl
-        1 -> runOne $ args !! 0
-        _ -> putStrLn "wrong num of args"
+    if null args
+        then runRepl
+        else runOne $ args
