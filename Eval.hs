@@ -158,26 +158,41 @@ applyProc [] = throwError $ NumArgs 2 []
 
 makePort :: IOMode -> [LispVal] -> IOThrowsError LispVal
 makePort mode [String filename] = liftM Port $ liftIO $ openFile filename mode
+makePort _ [x] = throwError $ TypeMismatch "string" x
+makePort _ args = throwError $ NumArgs 1 args
 
 closePort :: [LispVal] -> IOThrowsError LispVal
 closePort [Port port] = liftIO $ hClose port >> (return $ Bool True)
+closePort [x] = throwError $ TypeMismatch "port" x
+closePort args = throwError $ NumArgs 1 args
 
 readProc :: [LispVal] -> IOThrowsError LispVal
 readProc [] = readProc [Port stdin]
 readProc [Port port] = (liftIO $ hGetLine port) >>= liftThrows . readExpr
+readProc [x] = throwError $ TypeMismatch "port" x
+readProc args = throwError $ NumArgs 1 args
+
 
 writeProc :: [LispVal] -> IOThrowsError LispVal
 writeProc [obj] = writeProc [obj, Port stdout]
 writeProc [obj, Port port] = liftIO $ hPrint port obj >> (return $ Bool True)
+writeProc args@(_:_:_) = throwError $ NumArgs 2 args
+writeProc [] = throwError $ NumArgs 2 []
 
 readContents :: [LispVal] -> IOThrowsError LispVal
 readContents [String filename] = liftM String $ liftIO $ readFile filename
+readContents [x] = throwError $ TypeMismatch "string" x
+readContents args@(_:_) = throwError $ NumArgs 1 args
+readContents [] = throwError $ NumArgs 1 []
 
 load :: String -> IOThrowsError [LispVal]
 load filename = (liftIO $ readFile filename) >>= liftThrows . readExprList
 
 readAll :: [LispVal] -> IOThrowsError LispVal
 readAll [String filename] = liftM List $ load filename
+readAll [x] = throwError $ TypeMismatch "string" x
+readAll args@(_:_) = throwError $ NumArgs 1 args
+readAll [] = throwError $ NumArgs 1 []
 
 
 isBound :: Env -> String -> IO Bool

@@ -84,7 +84,7 @@ nullEnv = newIORef []
 
 -- Error types
 
-data LispError = NumArgs Integer [LispVal]
+data LispError = NumArgs Int [LispVal]
                | TypeMismatch String LispVal
                | Parser ParseError
                | BadSpecialForm String LispVal

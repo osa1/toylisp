@@ -1,9 +1,10 @@
+{-# OPTIONS_GHC -fno-warn-unused-do-bind -fno-warn-hi-shadowing #-}
+
 module Parser where
 
 import Control.Monad
-import System.Environment
 import Text.ParserCombinators.Parsec
-import Numeric (readHex, readOct, readFloat)
+import Numeric (readFloat)
 import Control.Monad.Error
 
 import Types
@@ -20,7 +21,6 @@ parseString = do
                        , try (string "\\t")
                        , try (string "\\\\")
                        ] <|> (liftM (:[]) $ noneOf "\"")
-    --x <- many $ (noneOf "\"")
     char '"'
     return $ String $ concat x
 
@@ -108,6 +108,9 @@ readOrThrow parser input = case parse parser "lisp" input of
     Left err -> throwError $ Parser err
     Right val -> return val
 
+readExpr :: String -> ThrowsError LispVal
 readExpr = readOrThrow parseExpr
+
+readExprList :: String -> ThrowsError [LispVal]
 readExprList = readOrThrow (endBy parseExpr spaces)
 
