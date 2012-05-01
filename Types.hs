@@ -1,4 +1,5 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
+{-# OPTIONS_GHC -fno-warn-hi-shadowing #-}
 
 module Types
     ( LispVal(..)
@@ -19,7 +20,7 @@ module Types
     ) where
 
 import Control.Monad.Error
-import Text.ParserCombinators.Parsec (ParseError(..))
+import Text.ParserCombinators.Parsec (ParseError)
 import IO (Handle)
 
 import Data.IORef
@@ -46,14 +47,16 @@ data LispVal = Atom String
 
 instance Show LispVal where
     show (String contents) = "\"" ++ contents ++ "\""
+    show (Character char) = "'" ++ [char] ++ "'"
     show (Atom name) = name
     show (Number contents) = show contents
+    show (Float float) = show float
     show (Bool True) = "#t"
     show (Bool False) = "#f"
     show (List contents) = "(" ++ unwordsList contents ++ ")"
     show (DottedList head tail) = "(" ++ unwordsList head ++ " . " ++ show tail ++ ")"
     show (PrimitiveFunc _) = "<primitive>"
-    show (Func args varargs body env) =
+    show (Func args varargs _ _) =
         "(lambda (" ++ unwords (map show args) ++
             (case varargs of
                 Nothing -> ") ...)"
@@ -64,7 +67,10 @@ instance Show LispVal where
 makeFunc :: (Maybe String) -> Env -> [LispVal] -> [LispVal] -> IOThrowsError LispVal
 makeFunc varargs env params body = return $ Func (map show params) varargs body env
 
+makeNormalFunc :: Env -> [LispVal] -> [LispVal] -> IOThrowsError LispVal
 makeNormalFunc = makeFunc Nothing
+
+makeVarargs :: (Show a) => a -> Env -> [LispVal] -> [LispVal] -> IOThrowsError LispVal
 makeVarargs = makeFunc . Just . show
 
 unwordsList :: [LispVal] -> String
@@ -87,6 +93,7 @@ data LispError = NumArgs Integer [LispVal]
                | Default String
 
 instance Show LispError where
+    show (Default message) = message
     show (UnboundVar message varname) = message ++ ": " ++ varname
     show (BadSpecialForm message form) = message ++ ": " ++ show form
     show (NotFunction message func) = message ++ ": " ++ show func
@@ -110,6 +117,7 @@ liftThrows (Right val) = return val
 runIOThrows :: IOThrowsError String -> IO String
 runIOThrows action = runErrorT (trapError action) >>= return . extractValue
 
+trapError :: IOThrowsError String -> IOThrowsError String
 trapError action = catchError action (return . show)
 
 extractValue :: ThrowsError a -> a
