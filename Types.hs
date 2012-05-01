@@ -18,6 +18,7 @@ module Types
 
 import Control.Monad.Error
 import Text.ParserCombinators.Parsec (ParseError(..))
+import IO (Handle)
 
 import Data.IORef
 
@@ -38,6 +39,9 @@ data LispVal = Atom String
                     , closure :: Env
                     }
 
+             | IOFunc ([LispVal] -> IOThrowsError LispVal)
+             | Port Handle
+
 instance Show LispVal where
     show (String contents) = "\"" ++ contents ++ "\""
     show (Atom name) = name
@@ -52,6 +56,8 @@ instance Show LispVal where
             (case varargs of
                 Nothing -> ") ...)"
                 Just arg -> " . " ++ arg ++ ") ...)")
+    show (Port _) = "<IO port>"
+    show (IOFunc _) = "<IO primitive>"
 
 makeFunc :: (Maybe String) -> Env -> [LispVal] -> [LispVal] -> IOThrowsError LispVal
 makeFunc varargs env params body = return $ Func (map show params) varargs body env
