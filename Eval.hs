@@ -82,9 +82,11 @@ boolp _ = return $ Bool False
 symbolToString :: [LispVal] -> ThrowsError LispVal
 symbolToString [(Atom s)] = return $ String s
 symbolToString [notSymbol] = throwError $ TypeMismatch "symbol" notSymbol
+symbolToString args@(_:xs) = throwError $ NumArgs (1 + (length xs)) args
+symbolToString [] = throwError $ NumArgs 1 []
 
 numericBinop :: (Integer -> Integer -> Integer) -> [LispVal] -> ThrowsError LispVal
-numericBinop op singleVal@[_] = throwError $ NumArgs 2 singleVal
+numericBinop _ singleVal@[_] = throwError $ NumArgs 2 singleVal
 numericBinop op params = mapM unpackNum params >>= return . Number . foldl1 op
 
 boolBinop :: (LispVal -> ThrowsError a) -> (a -> a -> Bool) -> [LispVal] -> ThrowsError LispVal
@@ -94,8 +96,13 @@ boolBinop unpacker op args = if length args /= 2
                                         right <- unpacker $ args !! 1
                                         return $ Bool $ left `op` right
 
+numBoolBinop :: (Integer -> Integer -> Bool) -> [LispVal] -> ThrowsError LispVal
 numBoolBinop = boolBinop unpackNum
+
+strBoolBinop :: (String -> String -> Bool) -> [LispVal] -> ThrowsError LispVal
 strBoolBinop = boolBinop unpackStr
+
+boolBoolBinop :: (Bool -> Bool -> Bool) -> [LispVal] -> ThrowsError LispVal
 boolBoolBinop = boolBinop unpackBool
 
 unpackStr :: LispVal -> ThrowsError String
@@ -112,15 +119,15 @@ unpackNum (List [n]) = unpackNum n
 unpackNum notNum = throwError $ TypeMismatch "number" notNum
 
 car :: [LispVal] -> ThrowsError LispVal
-car [List (x:xs)] = return x
-car [DottedList (x:xs) _] = return x
+car [List (x:__)] = return x
+car [DottedList (x:_) _] = return x
 car [badArg] = throwError $ TypeMismatch "pair" badArg
 car badArgList = throwError $ NumArgs 1 badArgList
 
 cdr ::[LispVal] -> ThrowsError LispVal
-cdr [List (x:xs)] = return $ List xs
+cdr [List (_:xs)] = return $ List xs
 cdr [DottedList (_:xs) x] = return $ DottedList xs x
-cdr [DottedList [xs] x] = return x
+cdr [DottedList [_] x] = return x
 cdr [badArg] = throwError $ TypeMismatch "pair" badArg
 cdr badArgList = throwError $ NumArgs 1 badArgList
 
@@ -139,7 +146,7 @@ eqv [(Atom arg1), (Atom arg2)] = return $ Bool $ arg1 == arg2
 eqv [(DottedList xs x), (DottedList ys y)] = eqv [List $ xs ++ [x], List $ ys ++ [y]]
 eqv [(List arg1), (List arg2)] = return $ Bool $ (length arg1 == length arg2) && (and $ map eqvPair $ zip arg1 arg2)
   where eqvPair (x1, x2) = case eqv [x1, x2] of
-                                Left err -> False
+                                Left _ -> False
                                 Right (Bool val) -> val
 eqv [_, _] = return $ Bool False
 eqv badArgList = throwError $ NumArgs 2 badArgList
@@ -147,6 +154,7 @@ eqv badArgList = throwError $ NumArgs 2 badArgList
 applyProc :: [LispVal] -> IOThrowsError LispVal
 applyProc [func, List args] = apply func args
 applyProc (func : args) = apply func args
+applyProc [] = throwError $ NumArgs 2 []
 
 makePort :: IOMode -> [LispVal] -> IOThrowsError LispVal
 makePort mode [String filename] = liftM Port $ liftIO $ openFile filename mode
@@ -259,10 +267,10 @@ eval env (List (function : args)) = do
 eval _ badForm = throwError $ BadSpecialForm "Unrecognized special form" badForm
 
 apply :: LispVal -> [LispVal] -> IOThrowsError LispVal
-apply (PrimitiveFunc func) args = liftThrows $ func args
-apply (Func params varargs body closure) args =
+apply (PrimitiveFunc func) args@(_:_) = liftThrows $ func args
+apply (Func params varargs body closure) args@(_:_) =
     if num params /= num args && varargs == Nothing
-        then throwError $ NumArgs (num params) args
+        then throwError $ NumArgs (length params) args
         else (liftIO $ bindVars closure $ zip params args) >>=
             bindVarArgs varargs >>= evalBody
   where remainingArgs = drop (length params) args
@@ -271,6 +279,9 @@ apply (Func params varargs body closure) args =
         bindVarArgs arg env = case arg of
             Just argName -> liftIO $ bindVars env [(argName, List $ remainingArgs)]
             Nothing -> return env
+apply func@(PrimitiveFunc _) [] = throwError $ NumArgs 2 [func]
+apply func@(Func _ _ _ _) [] = throwError $ NumArgs 2 [func]
+apply notFunc _ = throwError $ TypeMismatch "function" notFunc
 
 --main = do
 --    r <- getLine
