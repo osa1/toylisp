@@ -83,6 +83,7 @@ parseDottedList :: Parser LispVal
 parseDottedList = do
   head <- parseExpr `endBy` spaces
   tail <- char '.' >> spaces >> parseExpr
+  --tail <- char '.' >> spaces >> parseExpr
   return $ DottedList head tail
 
 parseQuoted :: Parser LispVal
@@ -91,6 +92,12 @@ parseQuoted = do
   x <- parseExpr
   return $ List [Atom "quote", x]
 
+parseDelimitedList :: Char -> Char -> Parser LispVal
+parseDelimitedList open close = do
+    char open
+    x <- (try parseList <|> parseDottedList)
+    char close
+    return x
 
 parseExpr :: Parser LispVal
 parseExpr = parseNumber
@@ -98,10 +105,7 @@ parseExpr = parseNumber
         <|> parseAtom
         <|> parseChar
         <|> parseQuoted
-        <|> do char '('
-               x <- (try parseList) <|> parseDottedList
-               char ')'
-               return x
+        <|> parseDelimitedList '(' ')'
 
 readOrThrow :: Parser a -> String -> ThrowsError a
 readOrThrow parser input = case parse parser "lisp" input of
