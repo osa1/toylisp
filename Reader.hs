@@ -1,41 +1,78 @@
+{-# LANGUAGE NoMonomorphismRestriction #-}
 module Reader where
 
+import Prelude hiding (readList)
 import Control.Monad.ST
 import Control.Monad.State
-import qualified Text.ParserCombinators.Parsec as P
+import qualified Text.Parsec as P
+import qualified Text.ParserCombinators.Parsec as PC
 import qualified Data.Map as M
+import Data.List (intercalate)
 
 import Types
+{-import RParser-}
 
+data ReadTable = ReadTable (M.Map Char (Reader LispVal))
 
-data MacroChar = MacroChar Char
-               | DispatchMacroChar Char
-    deriving (Show)
+instance Show ReadTable where
+    show (ReadTable m) = "ReadTable [" ++ intercalate "," (map (:[]) $ M.keys m) ++ "]"
 
-type ReadFn = P.Parser [LispVal]
-data ReadMacro = ReadMacro { delimiter :: Char
-                           , readFn    :: ReadFn
-                           }
+type ReaderS = (ReadTable,ReadTable)
+type Reader = P.Parsec String ReaderS
 
+runReader = P.runP
 
-type DispatchTable = M.Map Char ReadMacro
+data ReadMacroChar = MacroChar Char | DMacroChar Char
 
-type Reader = State DispatchTable LispVal
+readMacroChar :: Reader ReadMacroChar
+readMacroChar = (liftM MacroChar) $ P.oneOf "\";\'@^`~()[]{}|\\%#"
 
-{-initTable :: DispatchTable
-initTable = M.fromList [  ('(', )
-                       ]-}
+dispatchMacroChar :: Reader ReadMacroChar
+dispatchMacroChar = (liftM DMacroChar) $ P.char '#' >> P.oneOf "\";\'@^`~()[]{}|\\%#"
 
-runReader :: Reader -> DispatchTable -> (LispVal, DispatchTable)
-runReader = runState
+readExpr :: Reader LispVal
+readExpr = do
+    dc <- P.choice [ P.try $ dispatchMacroChar >> readMacroChar
+                   , readMacroChar
+                   ]
+    ((ReadTable rt),(ReadTable drt)) <- P.getState
+    let rf = 
+         case dc of
+           (MacroChar c)  -> M.lookup c rt
+           (DMacroChar c) -> M.lookup c drt
+    case rf of
+        Nothing -> fail "??" -- TODO fail msg
+        Just rf -> rf
 
-addReadMacro :: DispatchTable -> Char -> ReadMacro -> Reader
-addReadMacro dt c rm@(ReadMacro delimiter func) =
-    case M.lookup c dt of
-        Nothing -> do put (M.insert delimiter rm dt)
-                      return $ Bool True
-        Just _  -> return $ Bool False
-
-getReadFn :: DispatchTable -> Char -> Maybe ReadFn
-getReadFn t c = liftM readFn $ M.lookup c t
-
+-- readExpr :: ReadTable -> Parser LispVal
+-- readExpr (ReadTable m) = do
+--     c <- P.anyChar
+--     case M.lookup c m of
+--         Nothing -> 
+-- 
+-- initReadTable = ReadTable $
+--     M.fromList [ ('(',  readList)
+--                , ('"',  readString)
+--                , ('\'', readQuote)
+--                ]
+-- 
+-- initDReadTable = ReadTable $
+--     M.fromList [ ('\\', readChar)
+--                ]
+-- 
+-- tablesToParser :: ReadTable -> ReadTable -> P.Parser LispVal
+-- tablesToParser (ReadTable m1) (ReadTable m2) = 
+--     P.choice $ map (\(c,f) -> P.char c >> f) (M.toList m1)
+--             ++ map (\(c,f) -> P.char c >> f) (M.toList m2)
+-- 
+-- initReaderS :: ReaderS
+-- initReaderS = let rt  = initReadTable
+--                   drt = initDReadTable
+--               in (tablesToParser rt drt,rt,drt)
+-- 
+-- main :: IO ()
+-- main = do
+--     s <- getContents
+--     let (parser,_,_) = initReaderS
+--     r <- (P.parseTest parser s)
+--     print r
