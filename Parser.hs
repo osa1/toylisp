@@ -13,16 +13,13 @@ import Num
 symbol :: Parser Char
 symbol = oneOf "!$%&|*+-/:<=?>@^_~#"
 
+
 parseString :: Parser LispVal
 parseString = do
     char '"'
-    x <- many $ choice [ try (string "\\n")
-                       , try (string "\\r")
-                       , try (string "\\t")
-                       , try (string "\\\\")
-                       ] <|> (liftM (:[]) $ noneOf "\"")
+    s <- many $ noneOf "\""
     char '"'
-    return $ String $ concat x
+    return $ String s
 
 parseChar :: Parser LispVal
 parseChar = do -- TODO: #\space
