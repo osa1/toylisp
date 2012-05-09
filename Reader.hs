@@ -8,10 +8,13 @@ import qualified Text.Parsec as P
 import qualified Text.ParserCombinators.Parsec as PC
 import qualified Data.Map as M
 import Data.List (intercalate)
+import Control.Applicative ((<*))
 
 import Types
 {-import RParser-}
 
+-- XXX this data type is recursive, Reader type has ReaderS,
+--     and ReaderS has ReadTable again.
 data ReadTable = ReadTable (M.Map Char (Reader LispVal))
 
 instance Show ReadTable where
@@ -40,9 +43,27 @@ readExpr = do
          case dc of
            (MacroChar c)  -> M.lookup c rt
            (DMacroChar c) -> M.lookup c drt
-    case rf of
-        Nothing -> fail "??" -- TODO fail msg
-        Just rf -> rf
+    maybe (fail "??") id rf -- TODO fail msg
+
+readExprs :: Reader [LispVal]
+readExprs = P.many readExpr
+
+readString :: Reader LispVal
+readString = (liftM String) $ (P.many $ P.noneOf "\"") <* P.char '"'
+
+readChar :: Reader LispVal
+readChar = (liftM Character) $ P.anyChar <* P.char '\''
+
+readMacroTable = ReadTable $ M.fromList
+                    [ ('\'', readChar)
+                    , ('"',  readString)
+                    ]
+
+main :: IO ()
+main = do
+    s <- getContents
+    let p = P.runParser readExprs (readMacroTable,readMacroTable) "lisp" s
+    print p
 
 -- readExpr :: ReadTable -> Parser LispVal
 -- readExpr (ReadTable m) = do
