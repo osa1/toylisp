@@ -35,16 +35,25 @@ dispatchMacroChar = (liftM DMacroChar) $ P.char '#' >> P.oneOf "\";\'@^`~([{|\\%
 
 readExpr :: Reader LispVal
 readExpr = do
-    dc <- P.choice [
-                     P.try $ dispatchMacroChar >> readMacroChar
-                   , readMacroChar
-                   ]
-    ((ReadTable rt),(ReadTable drt)) <- P.getState
-    let rf = 
-         case dc of
-           (MacroChar c)  -> M.lookup c rt
-           (DMacroChar c) -> M.lookup c drt
-    maybe (fail "??") id rf -- TODO fail msg
+    P.choice [ readMacro
+             , readSymbol
+             , readNumber
+             ]
+  where readMacro = do
+            dc <- P.choice [ P.try $ dispatchMacroChar
+                           , readMacroChar
+                           ]
+            ((ReadTable rt),(ReadTable drt)) <- P.getState
+
+            let rf =
+                 case dc of
+                   (MacroChar c)  -> M.lookup c rt
+                   (DMacroChar c) -> M.lookup c drt
+            maybe (fail $ "Can't find macro for this char: " ++
+                    case dc of
+                        (MacroChar c)  -> [c]
+                        (DMacroChar c) -> ['#', c])
+                  id rf -- TODO fail msg
 
 readExprs :: Reader [LispVal]
 readExprs = readExpr `P.endBy` P.spaces
@@ -64,7 +73,7 @@ readString :: Reader LispVal
 readString = (liftM String) $ (P.many $ P.noneOf "\"") <* P.char '"'
 
 readChar :: Reader LispVal
-readChar = (liftM Character) $ P.anyChar <* P.char '\''
+readChar = (liftM Character) $ P.anyChar
 
 -- TODO other numeric types
 readNumber :: Reader LispVal
@@ -73,44 +82,53 @@ readNumber = (liftM $ Number . read) $ P.many1 P.digit
 readDelimitedList :: Char -> Reader LispVal
 readDelimitedList c = (liftM List) $ readExprs <* P.char c
 
+readSet :: Reader LispVal
+readSet = readDelimitedList '}'
+
 readMacroTable = ReadTable $ M.fromList
-                    [ ('\'', readChar)
-                    , ('"',  readString)
+                    [ ('"',  readString)
                     , ('(',  readDelimitedList ')')
                     ]
+
+readDMacroTable = ReadTable $ M.fromList
+                     [ ('{', readSet)
+                     , ('\\', readChar)
+                     --, ('(', readDelimitedList ')') -- for testing purposes
+                     ]
 
 main :: IO ()
 main = do
     s <- getContents
-    let p = P.runParser readExprs (readMacroTable,readMacroTable) "lisp" s
+    let !p = P.runParser readExprs (readMacroTable,readDMacroTable) "lisp" s
+    putStrLn "-------------"
     print p
 
 -- readExpr :: ReadTable -> Parser LispVal
 -- readExpr (ReadTable m) = do
 --     c <- P.anyChar
 --     case M.lookup c m of
---         Nothing -> 
--- 
+--         Nothing ->
+--
 -- initReadTable = ReadTable $
 --     M.fromList [ ('(',  readList)
 --                , ('"',  readString)
 --                , ('\'', readQuote)
 --                ]
--- 
+--
 -- initDReadTable = ReadTable $
 --     M.fromList [ ('\\', readChar)
 --                ]
--- 
+--
 -- tablesToParser :: ReadTable -> ReadTable -> P.Parser LispVal
--- tablesToParser (ReadTable m1) (ReadTable m2) = 
+-- tablesToParser (ReadTable m1) (ReadTable m2) =
 --     P.choice $ map (\(c,f) -> P.char c >> f) (M.toList m1)
 --             ++ map (\(c,f) -> P.char c >> f) (M.toList m2)
--- 
+--
 -- initReaderS :: ReaderS
 -- initReaderS = let rt  = initReadTable
 --                   drt = initDReadTable
 --               in (tablesToParser rt drt,rt,drt)
--- 
+--
 -- main :: IO ()
 -- main = do
 --     s <- getContents
