@@ -28,14 +28,15 @@ runReader = P.runP
 data ReadMacroChar = MacroChar Char | DMacroChar Char
 
 readMacroChar :: Reader ReadMacroChar
-readMacroChar = (liftM MacroChar) $ P.oneOf "\";\'@^`~()[]{}|\\%#"
+readMacroChar = (liftM MacroChar) $ P.oneOf "\";\'@^`~([{|\\%#"
 
 dispatchMacroChar :: Reader ReadMacroChar
-dispatchMacroChar = (liftM DMacroChar) $ P.char '#' >> P.oneOf "\";\'@^`~()[]{}|\\%#"
+dispatchMacroChar = (liftM DMacroChar) $ P.char '#' >> P.oneOf "\";\'@^`~([{|\\%#"
 
 readExpr :: Reader LispVal
 readExpr = do
-    dc <- P.choice [ P.try $ dispatchMacroChar >> readMacroChar
+    dc <- P.choice [
+                     P.try $ dispatchMacroChar >> readMacroChar
                    , readMacroChar
                    ]
     ((ReadTable rt),(ReadTable drt)) <- P.getState
@@ -46,7 +47,18 @@ readExpr = do
     maybe (fail "??") id rf -- TODO fail msg
 
 readExprs :: Reader [LispVal]
-readExprs = P.many readExpr
+readExprs = readExpr `P.endBy` P.spaces
+
+readSymbol :: Reader LispVal
+readSymbol = do
+    let cs = P.oneOf "+-*/_"
+    first <- P.choice [P.letter,cs]
+    rest <- P.many $ P.choice [P.letter,P.digit,cs]
+    let atom = [first] ++ rest
+    return $ case atom of
+        "#t" -> Bool True
+        "#f" -> Bool False
+        _    -> Atom atom
 
 readString :: Reader LispVal
 readString = (liftM String) $ (P.many $ P.noneOf "\"") <* P.char '"'
@@ -54,9 +66,17 @@ readString = (liftM String) $ (P.many $ P.noneOf "\"") <* P.char '"'
 readChar :: Reader LispVal
 readChar = (liftM Character) $ P.anyChar <* P.char '\''
 
+-- TODO other numeric types
+readNumber :: Reader LispVal
+readNumber = (liftM $ Number . read) $ P.many1 P.digit
+
+readDelimitedList :: Char -> Reader LispVal
+readDelimitedList c = (liftM List) $ readExprs <* P.char c
+
 readMacroTable = ReadTable $ M.fromList
                     [ ('\'', readChar)
                     , ('"',  readString)
+                    , ('(',  readDelimitedList ')')
                     ]
 
 main :: IO ()
