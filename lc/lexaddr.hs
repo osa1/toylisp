@@ -56,7 +56,7 @@ instance Compilable (Expr a) where
         indentedLine cs $ intercalate " " $ map (compile (CompilerState 0)) exprs
 
     compile cs (Let defs expr) =
-        (intercalate "\n" $ map (\(v,d) -> "let " ++ show v ++ " = " ++ show d ++ " in") defs) ++
+        (intercalate "\n" $ map (indentedLine cs . (\(v,d) -> "let " ++ show v ++ " = " ++ show d ++ " in")) defs) ++
             "\n" ++ compile cs expr
         
 
@@ -152,5 +152,5 @@ test2 = let st = parse expr "test2" "(_lambda (x y) (add x y))"
 
 test4 = let st = parse expr "test4" "(_let ((x foo) (y bar)) (add x y))"
         in case st of
-              Right expr -> putStrLn $ compile (CompilerState 0) expr
+              Right expr -> putStrLn $ compile (CompilerState 4) expr
               Left err -> putStrLn $ show err
