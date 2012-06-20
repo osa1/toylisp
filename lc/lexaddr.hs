@@ -17,11 +17,18 @@ data Expr a where
     If :: AnyExpr -> AnyExpr -> AnyExpr -> Expr If
     Lambda :: [Expr Ident] -> AnyExpr -> Expr Lambda
     Application :: [AnyExpr] -> Expr Application
-{-deriving instance Show a => Show (Expr a)-}
+
+instance Show (Expr a) where
+    show (Ident id) = id
+    show (If e1 e2 e3) = "(if " ++ (intercalate " " [show e1, show e2, show e3]) ++ ")"
+    show (Lambda params expr) = "(lambda (" ++ (intercalate " " $ map show params) ++ ") " ++ show expr ++ ")"
+    show (Application exprs) = "(" ++ (intercalate " " $ map show exprs) ++ ")"
 
 data AnyExpr where
     AnyExpr :: Expr a -> AnyExpr
-{-deriving instance Show a => Show AnyExpr-}
+
+instance Show AnyExpr where
+    show (AnyExpr e) = show e
 
 {-data CompilerState = CompilerState { indent :: Int }-}
 data CompilerState = CompilerState { indent :: Int }
@@ -57,12 +64,15 @@ instance Compilable AnyExpr where
 wrapSpaces parser = spaces >> (parser <* spaces)
 
 ident :: Parser (Expr Ident)
-ident = fmap Ident $ many1 (oneOf $ ['a'..'z'] ++ ['A'..'Z'] ++ "-_/\\*+?")
+ident = do
+    first <- oneOf $ ['a'..'z'] ++ ['A'..'Z']
+    rest <- many $ oneOf $ ['a'..'z'] ++ ['A'..'Z'] ++ "-_/\\*+?"
+    return $ Ident $ [first] ++ rest
 
 lambda :: Parser (Expr Lambda)
 lambda = do
     char '('
-    wrapSpaces $ string "lambda"
+    wrapSpaces $ string "_lambda"
     char '('
     params <- ident `sepBy` spaces
     char ')'
@@ -80,7 +90,7 @@ application = do
 ifExpr :: Parser (Expr If)
 ifExpr = do
     char '('
-    wrapSpaces $ string "if"
+    wrapSpaces $ string "_if"
     cond <- expr
     thenCase <- expr
     elseCase <- expr
@@ -91,11 +101,13 @@ anyExpr :: Parser (Expr a) -> Parser AnyExpr
 anyExpr p = fmap AnyExpr p
 
 expr :: Parser AnyExpr
-expr = choice [anyExpr $ try ident, anyExpr $ try lambda, anyExpr $ try ifExpr, anyExpr $ try application]
+expr = wrapSpaces $ choice [anyExpr $ try ident, anyExpr $ try lambda, anyExpr $ try ifExpr, anyExpr $ try application]
 
 --------------------------------------------------------------------------------
 
-test = let st = parse expr "test" "(if a b c)"
+test = let st = parse expr "test" "(_if a b c)"
        in case st of
              Right expr -> putStrLn $ compile (CompilerState 0) expr
+             {-Right expr -> putStrLn $ show expr-}
+             Left err -> putStrLn $ show err
 
