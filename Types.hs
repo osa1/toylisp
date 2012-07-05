@@ -110,4 +110,10 @@ type IOThrowsError = ErrorT LispError IO
 runIOThrows :: IOThrowsError String -> IO String
 runIOThrows action = do
     r <- runErrorT action
-    return $ show r
+    -- r :: Either LispError String
+    return $ extractValue r
+
+extractValue :: Either LispError String -> String
+extractValue (Right val) = val
+extractValue (Left err) = show err
+
