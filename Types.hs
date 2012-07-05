@@ -11,10 +11,7 @@ module Types
     , makeVarargs
     , LispError(..)
     , IOThrowsError
-    --, trapError
-    --, liftThrows
     , runIOThrows
-    --, extractValue
     , throwError
     ) where
 
@@ -28,7 +25,6 @@ import qualified Data.Set as S
 
 data LispVal = Atom String
              | List [LispVal]
-             | Set (S.Set LispVal)
              | DottedList [LispVal] LispVal
              | Number Integer
              | String String
@@ -108,22 +104,10 @@ instance Error LispError where
     noMsg = Default "An error has occured"
     strMsg = Default
 
---type ThrowsError = Either LispError
 type IOThrowsError = ErrorT LispError IO
-
---liftThrows :: ThrowsError a -> IOThrowsError a
---liftThrows (Left err) = throwError err
---liftThrows (Right val) = return val
 
 -- used in REPL
 runIOThrows :: IOThrowsError String -> IO String
---runIOThrows action = runErrorT (trapError action) >>= return . extractValue
 runIOThrows action = do
     r <- runErrorT action
     return $ show r
-
---trapError :: IOThrowsError String -> IOThrowsError String
---trapError action = catchError action (return . show)
-
---extractValue :: ThrowsError a -> a
---extractValue (Right val) = val
