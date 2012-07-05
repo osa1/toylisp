@@ -3,7 +3,8 @@ module REPL where
 import Control.Monad
 import System.Environment (getArgs)
 
-import IO hiding (try)
+--import IO hiding (try)
+import System.IO
 import Eval
 import Types
 import Parser
@@ -23,7 +24,7 @@ readPrompt prompt = do
 
 evalString :: Env -> String -> IO String
 evalString env expr =
-    runIOThrows $ liftM show $ (liftThrows $ readExpr expr) >>= eval env
+    runIOThrows $ liftM show $ readExpr expr >>= eval env
 
 evalAndPrint :: Env -> String -> IO ()
 evalAndPrint env expr = evalString env expr >>= putStrLn

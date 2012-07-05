@@ -10,24 +10,25 @@ module Types
     , makeNormalFunc
     , makeVarargs
     , LispError(..)
-    , ThrowsError
     , IOThrowsError
-    , trapError
-    , liftThrows
+    --, trapError
+    --, liftThrows
     , runIOThrows
-    , extractValue
+    --, extractValue
     , throwError
     ) where
 
 import Control.Monad.Error
 import Text.ParserCombinators.Parsec (ParseError)
-import IO (Handle)
+import System.IO (Handle)
 
 import Data.IORef
+import qualified Data.Set as S
 
 
 data LispVal = Atom String
              | List [LispVal]
+             | Set (S.Set LispVal)
              | DottedList [LispVal] LispVal
              | Number Integer
              | String String
@@ -35,7 +36,7 @@ data LispVal = Atom String
              | Float Float
              | Bool Bool
 
-             | PrimitiveFunc ([LispVal] -> ThrowsError LispVal)
+             | PrimitiveFunc ([LispVal] -> IOThrowsError LispVal)
              | Func { params :: [String]
                     , vararg :: (Maybe String)
                     , body :: [LispVal]
@@ -107,18 +108,22 @@ instance Error LispError where
     noMsg = Default "An error has occured"
     strMsg = Default
 
-type ThrowsError = Either LispError
+--type ThrowsError = Either LispError
 type IOThrowsError = ErrorT LispError IO
 
-liftThrows :: ThrowsError a -> IOThrowsError a
-liftThrows (Left err) = throwError err
-liftThrows (Right val) = return val
+--liftThrows :: ThrowsError a -> IOThrowsError a
+--liftThrows (Left err) = throwError err
+--liftThrows (Right val) = return val
 
+-- used in REPL
 runIOThrows :: IOThrowsError String -> IO String
-runIOThrows action = runErrorT (trapError action) >>= return . extractValue
+--runIOThrows action = runErrorT (trapError action) >>= return . extractValue
+runIOThrows action = do
+    r <- runErrorT action
+    return $ show r
 
-trapError :: IOThrowsError String -> IOThrowsError String
-trapError action = catchError action (return . show)
+--trapError :: IOThrowsError String -> IOThrowsError String
+--trapError action = catchError action (return . show)
 
-extractValue :: ThrowsError a -> a
-extractValue (Right val) = val
+--extractValue :: ThrowsError a -> a
+--extractValue (Right val) = val

@@ -104,14 +104,14 @@ parseExpr = parseNumber
         <|> parseQuoted
         <|> parseDelimitedList '(' ')'
 
-readOrThrow :: Parser a -> String -> ThrowsError a
+readOrThrow :: Parser a -> String -> IOThrowsError a
 readOrThrow parser input = case parse parser "lisp" input of
     Left err -> throwError $ Parser err
     Right val -> return val
 
-readExpr :: String -> ThrowsError LispVal
+readExpr :: String -> IOThrowsError LispVal
 readExpr = readOrThrow parseExpr
 
-readExprList :: String -> ThrowsError [LispVal]
+readExprList :: String -> IOThrowsError [LispVal]
 readExprList = readOrThrow (endBy parseExpr spaces)
 
