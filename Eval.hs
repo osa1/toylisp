@@ -282,6 +282,8 @@ eval env (List (Atom "lambda" : varargs@(Atom _) : body)) =
     makeVarargs varargs env [] body
 eval env (List [Atom "load", String filename]) =
     load filename >>= liftM last . mapM (eval env)
+eval env (List [Atom "eval", vals]) =
+    eval env vals
 eval env (List (function : args)) = do
     func <- eval env function
     argVals <- mapM (eval env) args
