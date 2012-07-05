@@ -1,3 +1,11 @@
-* Use Atom for func param names
-* Add "NoMonomorphismRestriction" pragma
-* Add "-Wall" compiler flag and fix warnings
+TODO
+----
+
+ * Make function calls CPS
+   * Then implement call/cc
+ * Implement (read)
+ * Implement quasiquotations
+ * Remove unnecessary error type (ThrowsError, making every error type of IOThrowsError should be better for debugging, and make the code simpler)
+
+
+ * Compiling to another language(OCaml ?)
