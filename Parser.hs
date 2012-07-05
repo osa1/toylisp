@@ -96,12 +96,18 @@ parseDelimitedList open close = do
     char close
     return x
 
+makeVector :: LispVal -> LispVal
+makeVector (List lst) = List $ [Atom "vector"] ++ lst
+
 parseExpr :: Parser LispVal
 parseExpr = parseNumber
         <|> parseString
         <|> parseAtom
         <|> parseChar
         <|> parseQuoted
+        -- <|> parseQuasiquotation
+        -- <|> parseDispatchMacro
+        <|> liftM makeVector (parseDelimitedList '[' ']')
         <|> parseDelimitedList '(' ')'
 
 readOrThrow :: Parser a -> String -> IOThrowsError a
