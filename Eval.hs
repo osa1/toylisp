@@ -1,12 +1,14 @@
-module Eval where
-
---import Control.Monad.Error
+module Eval
+    ( eval
+    , apply
+    , primitiveBindings
+    , bindVars
+    ) where
 
 import Control.Monad (liftM)
 import Data.IORef
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Error (runErrorT)
---import IO
 import System.IO
 
 import Types
@@ -57,6 +59,9 @@ primitives = [ ("car", car)
              , ("write", writeProc)
              , ("read-contents", readContents)
              , ("read-all", readAll)
+
+             -- read
+             , ("read-form", lispRead)
              ]
 
 stringp :: [LispVal] -> IOThrowsError LispVal
@@ -199,6 +204,10 @@ readAll [x] = throwError $ TypeMismatch "string" x
 readAll args@(_:_) = throwError $ NumArgs 1 args
 readAll [] = throwError $ NumArgs 1 []
 
+lispRead :: [LispVal] -> IOThrowsError LispVal
+lispRead [String form] = readOrThrow parseExpr form
+lispRead [x] = throwError $ TypeMismatch "string" x
+lispRead args = throwError $ NumArgs 1 args
 
 isBound :: Env -> String -> IO Bool
 isBound envRef var = readIORef envRef >>= return . maybe False (const True) . lookup var
@@ -244,9 +253,6 @@ primitiveBindings =
     let makeFunc constructor (var, func) = (var, constructor func)
         addPrimitives = flip bindVars $ map (makeFunc PrimitiveFunc) primitives
     in nullEnv >>= addPrimitives
---primitiveBindings = nullEnv >>= (flip bindVars $ map
---    makePrimitiveFunc primitives)
---  where makePrimitiveFunc (var, func) = (var, PrimitiveFunc func)
 
 eval :: Env -> LispVal -> IOThrowsError LispVal
 eval _ val@(String _) = return val
@@ -262,8 +268,6 @@ eval env (List [Atom "if", pred, conseq, alt]) = do
         _ -> eval env conseq
 eval env (List [Atom "set!", Atom var, form]) =
     eval env form >>= setVar env var
---eval env (List [Atom "define", Atom var, form]) =
---    eval env form >>= defineVar env var
 eval env (List [Atom "define", Atom var, form]) =
     eval env form >>= defineVar env var
 eval env (List (Atom "define" : List (Atom var : params) : body)) =
@@ -282,7 +286,6 @@ eval env (List (function : args)) = do
     func <- eval env function
     argVals <- mapM (eval env) args
     apply func argVals
---eval env (List (Atom func:args)) = mapM (eval env) args >>= liftThrows . apply func
 eval _ badForm = throwError $ BadSpecialForm "Unrecognized special form" badForm
 
 apply :: LispVal -> [LispVal] -> IOThrowsError LispVal
