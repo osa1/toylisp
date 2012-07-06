@@ -1,5 +1,6 @@
 module Eval
     ( eval
+    , evalCPS
     , apply
     , primitiveBindings
     , bindVars
@@ -254,6 +255,31 @@ primitiveBindings =
         addPrimitives = flip bindVars $ map (makeFunc PrimitiveFunc) primitives
     in nullEnv >>= addPrimitives
 
+evalCPS :: Env -> LispVal -> Cont -> IOThrowsError LispVal
+evalCPS _ val@(String _) cont = applyCont cont val
+evalCPS _ val@(Number _) cont = applyCont cont val
+evalCPS _ val@(Bool _) cont = applyCont cont val
+evalCPS _ (List [Atom "quote", val]) cont = applyCont cont val -- hmmmmmmmmmmmmmmmmmmmmm
+evalCPS env (Atom id) cont = (getVar env id) >>= applyCont cont
+evalCPS env (List [Atom "if", pred, conseq, alt]) cont =
+    applyCont (PredCont conseq alt env cont) pred
+evalCPS env (List [Atom "set!", Atom var, form]) cont =
+    evalCPS env form (SetCont var env cont)
+
+
+
+applyCont :: Cont -> LispVal -> IOThrowsError LispVal
+applyCont EndCont val = do
+    liftIO $ putStrLn "returning value"
+    return val
+applyCont (PredCont conseq alt env cont) val =
+    evalCPS env val (TestCont conseq alt env cont)
+applyCont (TestCont conseq alt env cont) (Bool True) = applyCont cont conseq
+applyCont (TestCont conseq alt env cont) (Bool False) = applyCont cont alt
+applyCont (SetCont var env cont) form = setVar env var form >>= applyCont cont
+applyCont _ _ = undefined
+
+
 eval :: Env -> LispVal -> IOThrowsError LispVal
 eval _ val@(String _) = return val
 eval _ val@(Number _) = return val
@@ -282,8 +308,6 @@ eval env (List (Atom "lambda" : varargs@(Atom _) : body)) =
     makeVarargs varargs env [] body
 eval env (List [Atom "load", String filename]) =
     load filename >>= liftM last . mapM (eval env)
-eval env (List [Atom "eval", vals]) =
-    eval env vals
 eval env (List (function : args)) = do
     func <- eval env function
     argVals <- mapM (eval env) args
@@ -306,4 +330,3 @@ apply (Func params varargs body closure) args@(_:_) =
 apply func@(PrimitiveFunc _) [] = throwError $ NumArgs 2 [func]
 apply func@(Func _ _ _ _) [] = throwError $ NumArgs 2 [func]
 apply notFunc _ = throwError $ TypeMismatch "function" notFunc
-

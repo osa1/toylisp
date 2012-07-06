@@ -13,6 +13,7 @@ module Types
     , IOThrowsError
     , runIOThrows
     , throwError
+    , Cont(..)
     ) where
 
 import Control.Monad.Error
@@ -116,4 +117,13 @@ runIOThrows action = do
 extractValue :: Either LispError String -> String
 extractValue (Right val) = val
 extractValue (Left err) = show err
+
+
+-- Continuations
+
+data Cont = EndCont
+          | PredCont LispVal LispVal Env Cont
+          | TestCont LispVal LispVal Env Cont
+          | SetCont String Env Cont
+          | ApplyCont LispVal [LispVal] Env Cont -- Func, Params, env and last cont
 
