@@ -11,12 +11,6 @@ import Types
 symbol :: Parser Char
 symbol = oneOf "!$%&|*+-/:<=?>@^_~#"
 
-string :: Parser LispVal
-string = (liftM String) $ many $ noneOf "\"" <* P.char '"'
-
-char :: Parser LispVal
-char = (liftM Character) $ anyChar >> P.char '\''
-
 atom :: Parser LispVal
 atom = do
     first <- letter <|> symbol
@@ -52,5 +46,23 @@ readMacroChar = oneOf "\";\'@^`~()[]{}|\\%#"
 dispatchMacroChar :: Parser Char
 dispatchMacroChar = P.char '#'
 
-list :: Parser LispVal
-list = liftM List $ expr `sepBy` spaces
+list :: Parser [LispVal]
+list = undefined
+{-list = readExpr `sepBy` spaces-}
+{-list = undefined-}
+
+readChar :: Parser LispVal
+readChar = (liftM Character) anyChar
+
+readString :: Parser LispVal
+readString = (liftM String) $ many $ noneOf "\"" <* P.char '"'
+
+readList :: Parser LispVal
+readList = (liftM List) $ list <* P.char ')'
+
+readQuote :: Parser LispVal
+readQuote = undefined
+
+readExpr :: Parser LispVal
+readExpr = undefined
+
