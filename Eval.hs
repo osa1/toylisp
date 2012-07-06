@@ -1,7 +1,6 @@
 module Eval
-    ( eval
-    , evalCPS
-    , apply
+    (
+      evalCPS
     , primitiveBindings
     , bindVars
     ) where
@@ -49,7 +48,7 @@ primitives = [ ("car", car)
              , ("list?", listp)
              , ("boolean?", boolp)
              , ("symbol->string", symbolToString)
-             , ("apply", applyProc)
+             -- , ("apply", applyProc)
 
              -- IO functions
              , ("open-input-file", makePort ReadMode)
@@ -162,10 +161,10 @@ eqv' [(List arg1), (List arg2)] = return $ Bool $ (length arg1 == length arg2) &
 eqv' [_, _] = return $ Bool False
 eqv' badArgList = throwError $ NumArgs 2 badArgList
 
-applyProc :: [LispVal] -> IOThrowsError LispVal
-applyProc [func, List args] = apply func args
-applyProc (func : args) = apply func args
-applyProc [] = throwError $ NumArgs 2 []
+--applyProc :: [LispVal] -> IOThrowsError LispVal
+--applyProc [func, List args] = apply func args
+--applyProc (func : args) = apply func args
+--applyProc [] = throwError $ NumArgs 2 []
 
 makePort :: IOMode -> [LispVal] -> IOThrowsError LispVal
 makePort mode [String filename] = liftM Port $ liftIO $ openFile filename mode
@@ -305,67 +304,97 @@ applyCont (SetCont var env cont) form = do
     setVar env var form >>= applyCont cont
 
 applyCont (SeqCont (x:xs) vals env cont) fun = do
-    liftIO $ putStrLn "SeqCont"
+    liftIO $ putStrLn $ "SeqCont" ++ show fun
     r <- evalCPS env x EndCont
     applyCont (SeqCont xs (vals++[r]) env cont) fun
 applyCont (SeqCont [] vals env cont) fun = do
-    liftIO $ putStrLn "SeqCont"
-    apply fun vals >>= applyCont cont
+    liftIO $ putStrLn $ "SeqCont" ++ show fun
+    applyCPS fun vals cont
 
 applyCont (DefineCont var env cont) form = do
     liftIO $ putStrLn "DefineCont"
     defineVar env var form >>= applyCont cont
 
+applyCont (SeqLastCont (x:xs) vals env cont) expr = do
+    liftIO $ putStrLn $ "SeqLastCont" ++ show expr
+    r <- evalCPS env expr EndCont
+    applyCont (SeqLastCont (tail xs) (vals++[r]) env cont) (head xs)
+
+applyCont (SeqLastCont [] vals env cont) expr = do
+    liftIO $ putStrLn $ "SeqLastCont" ++ show expr
+    evalCPS env expr cont
+    --applyCont cont expr
+
 applyCont _ _ = undefined
 
 
-eval :: Env -> LispVal -> IOThrowsError LispVal
-eval _ val@(String _) = return val
-eval _ val@(Number _) = return val
-eval _ val@(Bool _)   = return val
-eval _ (List [Atom "quote", val]) = return val
+--eval :: Env -> LispVal -> IOThrowsError LispVal
+--eval _ val@(String _) = return val
+--eval _ val@(Number _) = return val
+--eval _ val@(Bool _)   = return val
+--eval _ (List [Atom "quote", val]) = return val
 
-eval env (Atom id) = getVar env id
-eval env (List [Atom "if", pred, conseq, alt]) = do
-    result <- eval env pred
-    case result of
-        Bool False -> eval env alt
-        _ -> eval env conseq
-eval env (List [Atom "set!", Atom var, form]) =
-    eval env form >>= setVar env var
-eval env (List [Atom "define", Atom var, form]) =
-    eval env form >>= defineVar env var
-eval env (List (Atom "define" : List (Atom var : params) : body)) =
-    makeNormalFunc env params body >>= defineVar env var
-eval env (List (Atom "define" : DottedList (Atom var : params) varargs : body)) =
-    makeVarargs varargs env params body >>= defineVar env var
-eval env (List (Atom "lambda" : List params : body)) =
-    makeNormalFunc env params body
-eval env (List (Atom "lambda" : DottedList params varargs : body)) =
-    makeVarargs varargs env params body
-eval env (List (Atom "lambda" : varargs@(Atom _) : body)) =
-    makeVarargs varargs env [] body
-eval env (List [Atom "load", String filename]) =
-    load filename >>= liftM last . mapM (eval env)
-eval env (List (function : args)) = do
-    func <- eval env function
-    argVals <- mapM (eval env) args
-    apply func argVals
-eval _ badForm = throwError $ BadSpecialForm "Unrecognized special form" badForm
+--eval env (Atom id) = getVar env id
+--eval env (List [Atom "if", pred, conseq, alt]) = do
+--    result <- eval env pred
+--    case result of
+--        Bool False -> eval env alt
+--        _ -> eval env conseq
+--eval env (List [Atom "set!", Atom var, form]) =
+--    eval env form >>= setVar env var
+--eval env (List [Atom "define", Atom var, form]) =
+--    eval env form >>= defineVar env var
+--eval env (List (Atom "define" : List (Atom var : params) : body)) =
+--    makeNormalFunc env params body >>= defineVar env var
+--eval env (List (Atom "define" : DottedList (Atom var : params) varargs : body)) = makeVarargs varargs env params body >>= defineVar env var
+--eval env (List (Atom "lambda" : List params : body)) =
+--    makeNormalFunc env params body
+--eval env (List (Atom "lambda" : DottedList params varargs : body)) =
+--    makeVarargs varargs env params body
+--eval env (List (Atom "lambda" : varargs@(Atom _) : body)) =
+--    makeVarargs varargs env [] body
+--eval env (List [Atom "load", String filename]) =
+--    load filename >>= liftM last . mapM (eval env)
+--eval env (List (function : args)) = do
+--    func <- eval env function
+--    argVals <- mapM (eval env) args
+--    apply func argVals
+--eval _ badForm = throwError $ BadSpecialForm "Unrecognized special form" badForm
 
-apply :: LispVal -> [LispVal] -> IOThrowsError LispVal
-apply (PrimitiveFunc func) args@(_:_) = func args
-apply (Func params varargs body closure) args@(_:_) =
+applyCPS :: LispVal -> [LispVal] -> Cont -> IOThrowsError LispVal
+applyCPS (PrimitiveFunc func) args@(_:_) cont = func args >>= applyCont cont
+
+applyCPS (Func params varargs body closure) args@(_:_) cont =
     if num params /= num args && varargs == Nothing
         then throwError $ NumArgs (length params) args
         else (liftIO $ bindVars closure $ zip params args) >>=
             bindVarArgs varargs >>= evalBody
   where remainingArgs = drop (length params) args
         num = toInteger . length
-        evalBody env = liftM last $ mapM (eval env) body
         bindVarArgs arg env = case arg of
             Just argName -> liftIO $ bindVars env [(argName, List $ remainingArgs)]
             Nothing -> return env
-apply func@(PrimitiveFunc _) [] = throwError $ NumArgs 2 [func]
-apply func@(Func _ _ _ _) [] = throwError $ NumArgs 2 [func]
-apply notFunc _ = throwError $ TypeMismatch "function" notFunc
+        evalBody :: Env -> IOThrowsError LispVal
+        evalBody env = applyCont (SeqLastCont (tail body) [] env cont) (head body)
+        --evalBody env = evalCPS env (head body) (SeqLastCont (tail body) [] env cont)
+applyCPS func@(PrimitiveFunc _) [] _ = throwError $ NumArgs 2 [func]
+applyCPS func@(Func _ _ _ _) [] _ = throwError $ NumArgs 2 [func]
+applyCPS notFunc _ _ = throwError $ TypeMismatch "function" notFunc
+
+
+--apply :: LispVal -> [LispVal] -> IOThrowsError LispVal
+--apply (PrimitiveFunc func) args@(_:_) = func args
+--apply (Func params varargs body closure) args@(_:_) =
+--    if num params /= num args && varargs == Nothing
+--        then throwError $ NumArgs (length params) args
+--        else (liftIO $ bindVars closure $ zip params args) >>=
+--            bindVarArgs varargs >>= evalBody
+--  where remainingArgs = drop (length params) args
+--        num = toInteger . length
+--        evalBody env = liftM last $ mapM (eval env) body
+--        bindVarArgs arg env = case arg of
+--            Just argName -> liftIO $ bindVars env [(argName, List $ remainingArgs)]
+--            Nothing -> return env
+--apply func@(PrimitiveFunc _) [] = throwError $ NumArgs 2 [func]
+--apply func@(Func _ _ _ _) [] = throwError $ NumArgs 2 [func]
+--apply notFunc _ = throwError $ TypeMismatch "function" notFunc
