@@ -125,5 +125,8 @@ data Cont = EndCont
           | PredCont LispVal LispVal Env Cont
           | TestCont LispVal LispVal Env Cont
           | SetCont String Env Cont
-          | ApplyCont LispVal [LispVal] Env Cont -- Func, Params, env and last cont
+          | DefineCont String Env Cont
+          | SeqCont [LispVal] [LispVal] Env Cont
+          | ArgsCont [LispVal] [LispVal] Env Cont
+
 

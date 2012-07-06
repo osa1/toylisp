@@ -265,18 +265,55 @@ evalCPS env (List [Atom "if", pred, conseq, alt]) cont =
     applyCont (PredCont conseq alt env cont) pred
 evalCPS env (List [Atom "set!", Atom var, form]) cont =
     evalCPS env form (SetCont var env cont)
+evalCPS env (List [Atom "define", Atom var, form]) cont =
+    evalCPS env form (DefineCont var env cont)
+evalCPS env (List (Atom "define" : List (Atom var : params) : body)) cont =
+    makeNormalFunc env params body >>= applyCont (SetCont var env cont)
+evalCPS env (List (Atom "define" : DottedList (Atom var : params) varargs : body)) cont =
+    makeVarargs varargs env params body >>= applyCont (SetCont var env cont)
+evalCPS env (List (Atom "lambda" : varargs@(Atom _) : body)) cont =
+    makeVarargs varargs env [] body >>= applyCont cont
 
+
+-- Function application
+evalCPS env (List (function : args)) cont =
+    evalCPS env function (SeqCont args [] env cont)
+    --func <- eval env function
+    --argVals <- mapM (eval env) args
+    --apply func argVals
+evalCPS _ badForm cont = throwError $ BadSpecialForm "Unrecognized special form" badForm
 
 
 applyCont :: Cont -> LispVal -> IOThrowsError LispVal
 applyCont EndCont val = do
     liftIO $ putStrLn "returning value"
     return val
-applyCont (PredCont conseq alt env cont) val =
+applyCont (PredCont conseq alt env cont) val = do
+    liftIO $ putStrLn "PredCont"
     evalCPS env val (TestCont conseq alt env cont)
-applyCont (TestCont conseq alt env cont) (Bool True) = applyCont cont conseq
-applyCont (TestCont conseq alt env cont) (Bool False) = applyCont cont alt
-applyCont (SetCont var env cont) form = setVar env var form >>= applyCont cont
+applyCont (TestCont conseq alt env cont) (Bool True) = do
+    liftIO $ putStrLn "TestCont"
+    applyCont cont conseq
+applyCont (TestCont conseq alt env cont) (Bool False) = do
+    liftIO $ putStrLn "TestCont"
+    applyCont cont alt
+applyCont (TestCont _ _ _ _) notBool = throwError $ TypeMismatch "bool" notBool
+applyCont (SetCont var env cont) form = do
+    liftIO $ putStrLn "SetCont"
+    setVar env var form >>= applyCont cont
+
+applyCont (SeqCont (x:xs) vals env cont) fun = do
+    liftIO $ putStrLn "SeqCont"
+    r <- evalCPS env x EndCont
+    applyCont (SeqCont xs (vals++[r]) env cont) fun
+applyCont (SeqCont [] vals env cont) fun = do
+    liftIO $ putStrLn "SeqCont"
+    apply fun vals >>= applyCont cont
+
+applyCont (DefineCont var env cont) form = do
+    liftIO $ putStrLn "DefineCont"
+    defineVar env var form >>= applyCont cont
+
 applyCont _ _ = undefined
 
 
