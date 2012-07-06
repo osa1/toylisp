@@ -271,16 +271,18 @@ evalCPS env (List (Atom "define" : List (Atom var : params) : body)) cont =
     makeNormalFunc env params body >>= applyCont (SetCont var env cont)
 evalCPS env (List (Atom "define" : DottedList (Atom var : params) varargs : body)) cont =
     makeVarargs varargs env params body >>= applyCont (SetCont var env cont)
+
+-- Lambda
+evalCPS env (List (Atom "lambda" : List params : body)) cont =
+    makeNormalFunc env params body >>= applyCont cont
 evalCPS env (List (Atom "lambda" : varargs@(Atom _) : body)) cont =
     makeVarargs varargs env [] body >>= applyCont cont
-
+evalCPS env (List (Atom "lambda" : DottedList params varargs : body)) cont =
+    makeVarargs varargs env params body >>= applyCont cont
 
 -- Function application
 evalCPS env (List (function : args)) cont =
     evalCPS env function (SeqCont args [] env cont)
-    --func <- eval env function
-    --argVals <- mapM (eval env) args
-    --apply func argVals
 evalCPS _ badForm cont = throwError $ BadSpecialForm "Unrecognized special form" badForm
 
 
