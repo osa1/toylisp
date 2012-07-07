@@ -324,7 +324,7 @@ applyCont (DefineCont var env cont) form = do
 applyCont (SeqLastCont (x:xs) env cont) expr = do
     liftIO $ putStrLn $ "SeqLastCont" ++ show expr
     r <- evalCPS env expr EndCont
-    applyCont (SeqLastCont (tail xs) env cont) (head xs)
+    applyCont (SeqLastCont xs env cont) x
 
 applyCont (SeqLastCont [] env cont) expr = do
     liftIO $ putStrLn $ "SeqLastCont" ++ show expr
