@@ -127,7 +127,7 @@ data Cont = EndCont
           | SetCont String Env Cont
           | DefineCont String Env Cont
           | SeqCont [LispVal] [LispVal] Env Cont
-          | SeqLastCont [LispVal] [LispVal] Env Cont
+          | SeqLastCont [LispVal] Env Cont
           | ArgsCont [LispVal] [LispVal] Env Cont
 
 
