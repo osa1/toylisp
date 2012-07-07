@@ -1,3 +1,6 @@
+{-# OPTIONS_GHC -fwarn-incomplete-patterns
+                -fwarn-unused-binds
+                -fwarn-unused-matches #-}
 module Eval
     (
       evalCPS
@@ -288,7 +291,7 @@ evalCPS env (List [Atom "load", String filename]) cont = do
 evalCPS env (List (function : args)) cont =
     evalCPS env function (SeqCont args [] env cont)
 
-evalCPS _ badForm cont = throwError $ BadSpecialForm "Unrecognized special form" badForm
+evalCPS _ badForm _ = throwError $ BadSpecialForm "Unrecognized special form" badForm
 
 
 applyCont :: Cont -> LispVal -> IOThrowsError LispVal
@@ -297,14 +300,14 @@ applyCont EndCont val = do
     return val
 applyCont (PredCont conseq alt env cont) val = do
     liftIO $ putStrLn "PredCont"
-    evalCPS env val (TestCont conseq alt env cont)
-applyCont (TestCont conseq alt env cont) (Bool True) = do
+    evalCPS env val (TestCont conseq alt cont)
+applyCont (TestCont conseq _ cont) (Bool True) = do
     liftIO $ putStrLn "TestCont"
     applyCont cont conseq
-applyCont (TestCont conseq alt env cont) (Bool False) = do
+applyCont (TestCont _ alt cont) (Bool False) = do
     liftIO $ putStrLn "TestCont"
     applyCont cont alt
-applyCont (TestCont _ _ _ _) notBool = throwError $ TypeMismatch "bool" notBool
+applyCont (TestCont _ _ _) notBool = throwError $ TypeMismatch "bool" notBool
 applyCont (SetCont var env cont) form = do
     liftIO $ putStrLn "SetCont"
     setVar env var form >>= applyCont cont
@@ -313,7 +316,7 @@ applyCont (SeqCont (x:xs) vals env cont) fun = do
     liftIO $ putStrLn $ "SeqCont" ++ show fun
     r <- evalCPS env x EndCont
     applyCont (SeqCont xs (vals++[r]) env cont) fun
-applyCont (SeqCont [] vals env cont) fun = do
+applyCont (SeqCont [] vals _ cont) fun = do
     liftIO $ putStrLn $ "SeqCont" ++ show fun
     applyCPS fun vals cont
 
@@ -323,7 +326,7 @@ applyCont (DefineCont var env cont) form = do
 
 applyCont (SeqLastCont (x:xs) env cont) expr = do
     liftIO $ putStrLn $ "SeqLastCont" ++ show expr
-    r <- evalCPS env expr EndCont
+    evalCPS env expr EndCont
     applyCont (SeqLastCont xs env cont) x
 
 applyCont (SeqLastCont [] env cont) expr = do
