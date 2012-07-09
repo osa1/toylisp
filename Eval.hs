@@ -274,6 +274,12 @@ evalCPS env (List (Atom "define" : List (Atom var : params) : body)) cont =
 evalCPS env (List (Atom "define" : DottedList (Atom var : params) varargs : body)) cont =
     makeVarargs varargs env params body >>= applyCont (DefineCont var env cont)
 
+-- call/cc
+evalCPS env (List [Atom "call/cc" , (List (Atom "lambda" : List params : body))]) cont = do
+    liftIO $ putStrLn "call/cc"
+    makeNormalFunc env params body >>= \fun -> applyCPS fun [Continuation cont] cont
+
+
 -- Lambda
 evalCPS env (List (Atom "lambda" : List params : body)) cont =
     makeNormalFunc env params body >>= applyCont cont
@@ -350,6 +356,8 @@ applyCPS (Func params varargs body closure) args@(_:_) cont =
             Nothing -> return env
         evalBody :: Env -> IOThrowsError LispVal
         evalBody env = applyCont (SeqLastCont (tail body) env cont) (head body)
+applyCPS (Continuation c) [param] _ = applyCont c param
+
 applyCPS func@(PrimitiveFunc _) [] _ = throwError $ NumArgs 2 [func]
 applyCPS func@(Func _ _ _ _) [] _ = throwError $ NumArgs 2 [func]
 applyCPS notFunc _ _ = throwError $ TypeMismatch "function" notFunc

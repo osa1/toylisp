@@ -43,6 +43,8 @@ data LispVal = Atom String
              | IOFunc ([LispVal] -> IOThrowsError LispVal)
              | Port Handle
 
+             | Continuation Cont
+
 instance Show LispVal where
     show (String contents) = "\"" ++ contents ++ "\""
     show (Character char) = "'" ++ [char] ++ "'"
@@ -61,6 +63,7 @@ instance Show LispVal where
                 Just arg -> " . " ++ arg ++ ") ...)")
     show (Port _) = "<IO port>"
     show (IOFunc _) = "<IO primitive>"
+    show (Continuation _) = "<Continuation>"
 
 makeFunc :: (Maybe String) -> Env -> [LispVal] -> [LispVal] -> IOThrowsError LispVal
 makeFunc varargs env params body = return $ Func (map show params) varargs body env
