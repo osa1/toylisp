@@ -11,7 +11,6 @@ module Eval
 import Control.Monad (liftM)
 import Data.IORef
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Error (runErrorT)
 import System.IO
 
 import Types
@@ -68,30 +67,30 @@ primitives = [ ("car", car)
              ]
 
 stringp :: [LispVal] -> IOThrowsError LispVal
-stringp [(String _)] = return $ Bool True
+stringp [String _] = return $ Bool True
 stringp _ = return $ Bool False
 
 symbolp :: [LispVal] -> IOThrowsError LispVal
-symbolp [(Atom _)] = return $ Bool True
+symbolp [Atom _] = return $ Bool True
 symbolp _ = return $ Bool False
 
 numberp :: [LispVal] -> IOThrowsError LispVal
-numberp [(Number _)] = return $ Bool True
-numberp [(Float _)]  = return $ Bool True
+numberp [Number _] = return $ Bool True
+numberp [Float _]  = return $ Bool True
 numberp _ = return $ Bool False
 
 listp :: [LispVal] -> IOThrowsError LispVal
-listp [(List _)] = return $ Bool True
+listp [List _] = return $ Bool True
 listp _ = return $ Bool False
 
 boolp :: [LispVal] -> IOThrowsError LispVal
-boolp [(Bool _)] = return $ Bool True
+boolp [Bool _] = return $ Bool True
 boolp _ = return $ Bool False
 
 symbolToString :: [LispVal] -> IOThrowsError LispVal
-symbolToString [(Atom s)] = return $ String s
+symbolToString [Atom s] = return $ String s
 symbolToString [notSymbol] = throwError $ TypeMismatch "symbol" notSymbol
-symbolToString args@(_:xs) = throwError $ NumArgs (1 + (length xs)) args
+symbolToString args@(_:xs) = throwError $ NumArgs (1 + length xs) args
 symbolToString [] = throwError $ NumArgs 1 []
 
 numericBinop :: (Integer -> Integer -> Integer) -> [LispVal] -> IOThrowsError LispVal
@@ -101,7 +100,7 @@ numericBinop op params = mapM unpackNum params >>= return . Number . foldl1 op
 boolBinop :: (LispVal -> IOThrowsError a) -> (a -> a -> Bool) -> [LispVal] -> IOThrowsError LispVal
 boolBinop unpacker op args = if length args /= 2
                                 then throwError $ NumArgs 2 args
-                                else do left <- unpacker $ args !! 0
+                                else do left <- unpacker $ head args
                                         right <- unpacker $ args !! 1
                                         return $ Bool $ left `op` right
 
@@ -142,8 +141,8 @@ cdr badArgList = throwError $ NumArgs 1 badArgList
 
 cons :: [LispVal] -> IOThrowsError LispVal
 cons [x1, List []] = return $ List [x1]
-cons [x, List xs] = return $ List $ [x] ++ xs
-cons [x, DottedList xs xlast] = return $ DottedList ([x] ++ xs) xlast
+cons [x, List xs] = return $ List $ x : xs
+cons [x, DottedList xs xlast] = return $ DottedList (x : xs) xlast
 cons [x1, x2] = return $ DottedList [x1] x2
 cons badArgList = throwError $ NumArgs 2 badArgList
 
@@ -152,12 +151,12 @@ eqv vals = case eqv' vals of
     Left err -> throwError err
     Right val -> return val
 eqv' :: [LispVal] -> Either LispError LispVal
-eqv' [(Bool arg1) , (Bool arg2)] = return $ Bool $ arg1 == arg2
-eqv' [(Number arg1), (Number arg2)] = return $ Bool $ arg1 == arg2
-eqv' [(String arg1), (String arg2)] = return $ Bool $ arg1 == arg2
-eqv' [(Atom arg1), (Atom arg2)] = return $ Bool $ arg1 == arg2
-eqv' [(DottedList xs x), (DottedList ys y)] = eqv' [List $ xs ++ [x], List $ ys ++ [y]]
-eqv' [(List arg1), (List arg2)] = return $ Bool $ (length arg1 == length arg2) && (and $ map eqvPair $ zip arg1 arg2)
+eqv' [Bool arg1, Bool arg2] = return $ Bool $ arg1 == arg2
+eqv' [Number arg1, Number arg2] = return $ Bool $ arg1 == arg2
+eqv' [String arg1, String arg2] = return $ Bool $ arg1 == arg2
+eqv' [Atom arg1, Atom arg2] = return $ Bool $ arg1 == arg2
+eqv' [DottedList xs x, DottedList ys y] = eqv' [List $ xs ++ [x], List $ ys ++ [y]]
+eqv' [List arg1, List arg2] = return $ Bool $ (length arg1 == length arg2) && (all eqvPair $ zip arg1 arg2)
   where eqvPair (x1, x2) = case eqv' [x1, x2] of
                                 Left _ -> False
                                 Right (Bool val) -> val
@@ -176,7 +175,7 @@ closePort args = throwError $ NumArgs 1 args
 
 readProc :: [LispVal] -> IOThrowsError LispVal
 readProc [] = readProc [Port stdin]
-readProc [Port port] = (liftIO $ hGetLine port) >>= readExpr
+readProc [Port port] = liftIO (hGetLine port) >>= readExpr
 readProc [x] = throwError $ TypeMismatch "port" x
 readProc args = throwError $ NumArgs 1 args
 
@@ -194,7 +193,7 @@ readContents args@(_:_) = throwError $ NumArgs 1 args
 readContents [] = throwError $ NumArgs 1 []
 
 load :: String -> IOThrowsError [LispVal]
-load filename = (liftIO $ readFile filename) >>= readExprList
+load filename = liftIO (readFile filename) >>= readExprList
 
 readAll :: [LispVal] -> IOThrowsError LispVal
 readAll [String filename] = liftM List $ load filename
@@ -257,7 +256,7 @@ evalCPS _ val@(String _) cont = applyCont cont val
 evalCPS _ val@(Number _) cont = applyCont cont val
 evalCPS _ val@(Bool _) cont = applyCont cont val
 evalCPS _ (List [Atom "quote", val]) cont = applyCont cont val -- hmmmmmmmmmmmmmmmmmmmmm
-evalCPS env (Atom id) cont = (getVar env id) >>= applyCont cont
+evalCPS env (Atom id) cont = getVar env id >>= applyCont cont
 evalCPS env (List [Atom "if", pred, conseq, alt]) cont =
     applyCont (PredCont conseq alt env cont) pred
 evalCPS env (List [Atom "set!", Atom var, form]) cont =
@@ -270,7 +269,7 @@ evalCPS env (List (Atom "define" : DottedList (Atom var : params) varargs : body
     makeVarargs varargs env params body >>= applyCont (DefineCont var env cont)
 
 -- call/cc
-evalCPS env (List [Atom "call/cc" , (List (Atom "lambda" : List params : body))]) cont = do
+evalCPS env (List [Atom "call/cc" , List (Atom "lambda" : List params : body)]) cont = do
     liftIO $ putStrLn "call/cc"
     makeNormalFunc env params body >>= \fun -> applyCPS fun [Continuation cont] cont
 
@@ -308,7 +307,7 @@ applyCont (TestCont conseq _ env cont) (Bool True) = do
 applyCont (TestCont _ alt env cont) (Bool False) = do
     liftIO $ putStrLn "TestCont"
     evalCPS env alt cont
-applyCont (TestCont _ _ _ _) notBool = throwError $ TypeMismatch "bool" notBool
+applyCont TestCont{} notBool = throwError $ TypeMismatch "bool" notBool
 applyCont (SetCont var env cont) form = do
     liftIO $ putStrLn "SetCont"
     setVar env var form >>= applyCont cont
@@ -347,14 +346,14 @@ applyCPS (Func params varargs body closure) args@(_:_) cont =
   where remainingArgs = drop (length params) args
         num = toInteger . length
         bindVarArgs arg env = case arg of
-            Just argName -> liftIO $ bindVars env [(argName, List $ remainingArgs)]
+            Just argName -> liftIO $ bindVars env [(argName, List remainingArgs)]
             Nothing -> return env
         evalBody :: Env -> IOThrowsError LispVal
         evalBody env = applyCont (SeqLastCont (tail body) env cont) (head body)
 applyCPS (Continuation c) [param] _ = applyCont c param
 
 applyCPS func@(PrimitiveFunc _) [] _ = throwError $ NumArgs 2 [func]
-applyCPS func@(Func _ _ _ _) [] _ = throwError $ NumArgs 2 [func] -- FIXME: first param of NumArgs
+applyCPS func@Func{} [] _ = throwError $ NumArgs 2 [func] -- FIXME: first param of NumArgs
 applyCPS func@(Continuation _) [] _ = throwError $ NumArgs 1 [func]
 applyCPS notFunc _ _ = throwError $ TypeMismatch "function" notFunc
 

@@ -29,15 +29,13 @@ evalAndPrint env expr = evalString env expr >>= putStrLn
 runOne :: [String] -> IO ()
 runOne args = do
     env <- primitiveBindings >>= flip bindVars [("args", List $ map String $ drop 1 args)]
-    r <- runIOThrows $ liftM show $ evalCPS env (List [Atom "load", String (args !! 0)]) EndCont
+    r <- runIOThrows $ liftM show $ evalCPS env (List [Atom "load", String (head args)]) EndCont
     hPutStrLn stderr r
 
 until_ :: Monad m => (a -> Bool) -> m a -> (a -> m ()) -> m ()
 until_ pred prompt action = do
     result <- prompt
-    if pred result
-        then return ()
-        else action result >> until_ pred prompt action
+    unless (pred result) $ action result >> until_ pred prompt action
 
 runRepl :: IO ()
 runRepl = do
@@ -52,4 +50,4 @@ main = do
     args <- getArgs
     if null args
         then runRepl
-        else runOne $ args
+        else runOne args

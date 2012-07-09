@@ -21,8 +21,6 @@ import Text.ParserCombinators.Parsec (ParseError)
 import System.IO (Handle)
 
 import Data.IORef
-import qualified Data.Set as S
-
 
 data LispVal = Atom String
              | List [LispVal]
@@ -35,7 +33,7 @@ data LispVal = Atom String
 
              | PrimitiveFunc ([LispVal] -> IOThrowsError LispVal)
              | Func { params :: [String]
-                    , vararg :: (Maybe String)
+                    , vararg :: Maybe String
                     , body :: [LispVal]
                     , closure :: Env
                     }
@@ -65,7 +63,7 @@ instance Show LispVal where
     show (IOFunc _) = "<IO primitive>"
     show (Continuation _) = "<Continuation>"
 
-makeFunc :: (Maybe String) -> Env -> [LispVal] -> [LispVal] -> IOThrowsError LispVal
+makeFunc :: Maybe String -> Env -> [LispVal] -> [LispVal] -> IOThrowsError LispVal
 makeFunc varargs env params body = return $ Func (map show params) varargs body env
 
 makeNormalFunc :: Env -> [LispVal] -> [LispVal] -> IOThrowsError LispVal
