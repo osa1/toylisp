@@ -126,7 +126,7 @@ extractValue (Left err) = show err
 
 data Cont = EndCont
           | PredCont LispVal LispVal Env Cont
-          | TestCont LispVal LispVal Cont
+          | TestCont LispVal LispVal Env Cont
           | SetCont String Env Cont
           | DefineCont String Env Cont
           | SeqCont [LispVal] [LispVal] Env Cont

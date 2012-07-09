@@ -306,14 +306,16 @@ applyCont EndCont val = do
     return val
 applyCont (PredCont conseq alt env cont) val = do
     liftIO $ putStrLn "PredCont"
-    evalCPS env val (TestCont conseq alt cont)
-applyCont (TestCont conseq _ cont) (Bool True) = do
+    evalCPS env val (TestCont conseq alt env cont)
+applyCont (TestCont conseq _ env cont) (Bool True) = do
     liftIO $ putStrLn "TestCont"
-    applyCont cont conseq
-applyCont (TestCont _ alt cont) (Bool False) = do
+    evalCPS env conseq cont
+    --applyCont cont conseq
+applyCont (TestCont _ alt env cont) (Bool False) = do
     liftIO $ putStrLn "TestCont"
-    applyCont cont alt
-applyCont (TestCont _ _ _) notBool = throwError $ TypeMismatch "bool" notBool
+    evalCPS env alt cont
+    --applyCont cont alt
+applyCont (TestCont _ _ _ _) notBool = throwError $ TypeMismatch "bool" notBool
 applyCont (SetCont var env cont) form = do
     liftIO $ putStrLn "SetCont"
     setVar env var form >>= applyCont cont
@@ -359,6 +361,7 @@ applyCPS (Func params varargs body closure) args@(_:_) cont =
 applyCPS (Continuation c) [param] _ = applyCont c param
 
 applyCPS func@(PrimitiveFunc _) [] _ = throwError $ NumArgs 2 [func]
-applyCPS func@(Func _ _ _ _) [] _ = throwError $ NumArgs 2 [func]
+applyCPS func@(Func _ _ _ _) [] _ = throwError $ NumArgs 2 [func] -- FIXME: first param of NumArgs
+applyCPS func@(Continuation _) [] _ = throwError $ NumArgs 1 [func]
 applyCPS notFunc _ _ = throwError $ TypeMismatch "function" notFunc
 
