@@ -164,11 +164,6 @@ eqv' [(List arg1), (List arg2)] = return $ Bool $ (length arg1 == length arg2) &
 eqv' [_, _] = return $ Bool False
 eqv' badArgList = throwError $ NumArgs 2 badArgList
 
---applyProc :: [LispVal] -> IOThrowsError LispVal
---applyProc [func, List args] = apply func args
---applyProc (func : args) = apply func args
---applyProc [] = throwError $ NumArgs 2 []
-
 makePort :: IOMode -> [LispVal] -> IOThrowsError LispVal
 makePort mode [String filename] = liftM Port $ liftIO $ openFile filename mode
 makePort _ [x] = throwError $ TypeMismatch "string" x
@@ -310,11 +305,9 @@ applyCont (PredCont conseq alt env cont) val = do
 applyCont (TestCont conseq _ env cont) (Bool True) = do
     liftIO $ putStrLn "TestCont"
     evalCPS env conseq cont
-    --applyCont cont conseq
 applyCont (TestCont _ alt env cont) (Bool False) = do
     liftIO $ putStrLn "TestCont"
     evalCPS env alt cont
-    --applyCont cont alt
 applyCont (TestCont _ _ _ _) notBool = throwError $ TypeMismatch "bool" notBool
 applyCont (SetCont var env cont) form = do
     liftIO $ putStrLn "SetCont"

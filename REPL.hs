@@ -21,7 +21,6 @@ readPrompt prompt = do
 
 evalString :: Env -> String -> IO String
 evalString env expr =
-    --runIOThrows $ liftM show $ readExpr expr >>= eval env
     runIOThrows $ liftM show  $ readExpr expr >>= (\expr -> evalCPS env expr EndCont)
 
 evalAndPrint :: Env -> String -> IO ()
@@ -30,7 +29,6 @@ evalAndPrint env expr = evalString env expr >>= putStrLn
 runOne :: [String] -> IO ()
 runOne args = do
     env <- primitiveBindings >>= flip bindVars [("args", List $ map String $ drop 1 args)]
-    --r <- runIOThrows $ liftM show $ eval env (List [Atom "load", String (args !! 0)])
     r <- runIOThrows $ liftM show $ evalCPS env (List [Atom "load", String (args !! 0)]) EndCont
     hPutStrLn stderr r
 
@@ -41,9 +39,13 @@ until_ pred prompt action = do
         then return ()
         else action result >> until_ pred prompt action
 
--- TODO: load standard library
 runRepl :: IO ()
-runRepl = primitiveBindings >>= until_ (== "quit") (readPrompt "λ> ") . evalAndPrint
+runRepl = do
+    env <- primitiveBindings
+    evalString env "(load \"stdlib.scm\")"
+    until_ (== "quit") (readPrompt "λ> ") (evalAndPrint env)
+
+
 
 main :: IO ()
 main = do
