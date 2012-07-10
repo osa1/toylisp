@@ -30,7 +30,7 @@ parseChar = do -- TODO: #\space
 parseAtom :: Parser LispVal
 parseAtom = do first <- letter <|> symbol
                rest <- many (letter <|> digit <|> symbol)
-               let atom = [first] ++ rest
+               let atom = first : rest
                return $ case atom of
                  "#t" -> Bool True
                  "#f" -> Bool False
@@ -52,7 +52,7 @@ parseOct = do
   return $ Number $ fromIntegral $ toInt i 8
 
 parseDec :: Parser LispVal
-parseDec = liftM (Number . fromIntegral . (flip toInt 10)) (many1 digit)
+parseDec = liftM (Number . fromIntegral . flip toInt 10) (many1 digit)
 
 parseHex :: Parser LispVal
 parseHex = do
@@ -92,12 +92,12 @@ parseQuoted = do
 parseDelimitedList :: Char -> Char -> Parser LispVal
 parseDelimitedList open close = do
     char open
-    x <- (try parseList <|> parseDottedList)
+    x <- try parseList <|> parseDottedList
     char close
     return x
 
 makeVector :: LispVal -> LispVal
-makeVector (List lst) = List $ [Atom "vector"] ++ lst
+makeVector (List lst) = List $ Atom "vector" : lst
 
 parseExpr :: Parser LispVal
 parseExpr = parseNumber

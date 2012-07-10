@@ -64,6 +64,9 @@ primitives = [ ("car", car)
 
              -- read
              , ("read-form", lispRead)
+
+             -- eval
+             --, ("eval", evalForm)
              ]
 
 stringp :: [LispVal] -> IOThrowsError LispVal
@@ -255,7 +258,7 @@ evalCPS :: Env -> LispVal -> Cont -> IOThrowsError LispVal
 evalCPS _ val@(String _) cont = applyCont cont val
 evalCPS _ val@(Number _) cont = applyCont cont val
 evalCPS _ val@(Bool _) cont = applyCont cont val
-evalCPS _ (List [Atom "quote", val]) cont = applyCont cont val -- hmmmmmmmmmmmmmmmmmmmmm
+evalCPS _ (List [Atom "quote", val]) cont = applyCont cont val
 evalCPS env (Atom id) cont = getVar env id >>= applyCont cont
 evalCPS env (List [Atom "if", pred, conseq, alt]) cont =
     applyCont (PredCont conseq alt env cont) pred
@@ -352,8 +355,8 @@ applyCPS (Func params varargs body closure) args@(_:_) cont =
         evalBody env = applyCont (SeqLastCont (tail body) env cont) (head body)
 applyCPS (Continuation c) [param] _ = applyCont c param
 
-applyCPS func@(PrimitiveFunc _) [] _ = throwError $ NumArgs 2 [func]
+applyCPS func@PrimitiveFunc{} [] _ = throwError $ NumArgs 2 [func]
 applyCPS func@Func{} [] _ = throwError $ NumArgs 2 [func] -- FIXME: first param of NumArgs
-applyCPS func@(Continuation _) [] _ = throwError $ NumArgs 1 [func]
+applyCPS func@Continuation{} [] _ = throwError $ NumArgs 1 [func]
 applyCPS notFunc _ _ = throwError $ TypeMismatch "function" notFunc
 
