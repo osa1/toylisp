@@ -23,8 +23,6 @@ instance Show ReadTable where
 type ReaderS = (ReadTable,ReadTable)
 type Reader = P.Parsec String ReaderS
 
-runReader = P.runP
-
 data ReadMacroChar = MacroChar Char | DMacroChar Char
 
 readMacroChar :: Reader ReadMacroChar
@@ -82,16 +80,27 @@ readNumber = (liftM $ Number . read) $ P.many1 P.digit
 readDelimitedList :: Char -> Reader LispVal
 readDelimitedList c = (liftM List) $ readExprs <* P.char c
 
-readSet :: Reader LispVal
-readSet = readDelimitedList '}'
+
+
+{- Common Lisp's quote reader macro(from On Lisp):
+   (set-macro-character #\'
+                        (lambda (stream char)
+                          (list 'quote (read stream t nil t))))
+-}
+
+readQuoted :: Reader LispVal
+readQuoted = do
+    expr <- readExpr
+    return $ List $ [Atom "quote"] ++ [expr]
 
 readMacroTable = ReadTable $ M.fromList
                     [ ('"',  readString)
                     , ('(',  readDelimitedList ')')
+                    , ('\'', readQuoted)
                     ]
 
 readDMacroTable = ReadTable $ M.fromList
-                     [ ('{', readSet)
+                     [ --('{', readSet)
                      , ('\\', readChar)
                      --, ('(', readDelimitedList ')') -- for testing purposes
                      ]
