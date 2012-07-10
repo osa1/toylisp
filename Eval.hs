@@ -64,9 +64,6 @@ primitives = [ ("car", car)
 
              -- read
              , ("read-form", lispRead)
-
-             -- eval
-             --, ("eval", evalForm)
              ]
 
 stringp :: [LispVal] -> IOThrowsError LispVal
@@ -275,6 +272,9 @@ evalCPS env (List (Atom "define" : DottedList (Atom var : params) varargs : body
 evalCPS env (List [Atom "call/cc" , List (Atom "lambda" : List params : body)]) cont =
     makeNormalFunc env params body >>= \fun -> applyCPS fun [Continuation cont] cont
 
+-- eval
+evalCPS env (List [Atom "eval", (List [Atom "quote", rest])]) cont = evalCPS env rest cont
+evalCPS env (List [Atom "eval", val]) cont = evalCPS env val cont
 
 -- Lambda
 evalCPS env (List (Atom "lambda" : List params : body)) cont =
