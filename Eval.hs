@@ -311,7 +311,9 @@ applyCont (SeqCont [] vals _ cont) fun = applyCPS fun vals cont
 
 applyCont (DefineCont var env cont) form = defineVar env var form >>= applyCont cont
 
-applyCont (SeqLastCont (x:xs) env cont) expr = applyCont (SeqLastCont xs env cont) x
+applyCont (SeqLastCont (x:xs) env cont) expr = do
+    evalCPS env expr EndCont
+    applyCont (SeqLastCont xs env cont) x
 applyCont (SeqLastCont [] env cont) expr = evalCPS env expr cont
 
 applyCont _ _ = undefined
