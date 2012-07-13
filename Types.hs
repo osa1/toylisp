@@ -94,7 +94,7 @@ instance Typed TVal where
 -- Errors
 
 data TError = NumArgs Int Int
-            | TypeMismatch TType String
+            | TypeMismatch TType TType
             | Parser ParseError
             | BadSpecialForm String AnyExpr
             | NotFunc String String
@@ -172,7 +172,7 @@ instance Show TError where
     show (NumArgs expected found) = "Expected " ++ show expected ++
                                     " args: found " ++ show found
     show (TypeMismatch expected found) = "Invalid type: expected " ++ show expected ++
-                                         ", found " ++ found
+                                         ", found " ++ show found
     show (Parser parseErr) = "Parse error at " ++ show parseErr
 
 

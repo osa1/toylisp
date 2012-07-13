@@ -73,7 +73,7 @@ apply (Func params varargs body closure) args cont =
 
 apply (Continuation c) [param] _ = applyCont c param
 
-apply wtf _ _ = throwError $ TypeMismatch FunctionType (show $ typeOf wtf)
+apply wtf _ _ = throwError $ TypeMismatch FunctionType (typeOf wtf)
 
 
 applyCont :: Cont -> TVal -> IOThrowsError TVal

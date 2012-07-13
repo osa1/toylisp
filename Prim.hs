@@ -74,17 +74,17 @@ errorOrFalse n vals = if length vals /= n then
 -- is there a way to generate this repetitive code?
 first :: SimpleFunc
 first [TList lst] = return $ head lst
-first [notList] = throwError $ TypeMismatch ListType (show $ typeOf notList)
+first [notList] = throwError $ TypeMismatch ListType (typeOf notList)
 first args = throwError $ NumArgs 1 (length args)
 
 rest :: SimpleFunc
 rest [TList lst] = return $ TList (tail lst)
-rest [notList] = throwError $ TypeMismatch ListType (show $ typeOf notList)
+rest [notList] = throwError $ TypeMismatch ListType (typeOf notList)
 rest args = throwError $ NumArgs 1 (length args)
 
 cons :: SimpleFunc
 cons [v, TList lst] = return $ TList (v : lst)
-cons [_, notLst] = throwError $ TypeMismatch ListType (show $ typeOf notLst)
+cons [_, notLst] = throwError $ TypeMismatch ListType (typeOf notLst)
 cons args = throwError $ NumArgs 2 (length args)
 
 stringp :: SimpleFunc
@@ -114,7 +114,7 @@ typeOfFun args = throwError $ NumArgs 1 (length args)
 
 symbolToString :: SimpleFunc
 symbolToString [TSymbol s] = return $ String s
-symbolToString [notSymbol] = throwError $ TypeMismatch SymbolType (show $ typeOf notSymbol)
+symbolToString [notSymbol] = throwError $ TypeMismatch SymbolType (typeOf notSymbol)
 symbolToString args = throwError $ NumArgs 1 (length args)
 
 numericBinop :: (Int -> Int -> Int) -> [TVal] -> IOThrowsError TVal
@@ -135,13 +135,13 @@ numBoolBinop = boolBinop unpackNum
 
 unpackNum :: TVal -> IOThrowsError Int
 unpackNum (Int n) = return n
-unpackNum notNum = throwError $ TypeMismatch IntType (show $ typeOf notNum)
+unpackNum notNum = throwError $ TypeMismatch IntType (typeOf notNum)
 
 boolBoolBinop :: (Bool -> Bool -> Bool) -> [TVal] -> IOThrowsError TVal
 boolBoolBinop = boolBinop unpackBool
   where unpackBool :: TVal -> IOThrowsError Bool
         unpackBool (Bool b) = return b
-        unpackBool notBool = throwError $ TypeMismatch BoolType (show $ typeOf notBool)
+        unpackBool notBool = throwError $ TypeMismatch BoolType (typeOf notBool)
 
 
 --strBoolBinop :: (String -> String -> Bool) -> [LispVal] -> IOThrowsError LispVal
@@ -208,7 +208,7 @@ boolBoolBinop = boolBinop unpackBool
 
 readForm :: [TVal] -> IOThrowsError TVal
 readForm [String form] = readAsSyntax form
-readForm [x] = throwError $ TypeMismatch StringType (show $ typeOf x)
+readForm [x] = throwError $ TypeMismatch StringType (typeOf x)
 readForm args = throwError $ NumArgs 1 (length args)
 
 primitiveBindings :: IO Env
