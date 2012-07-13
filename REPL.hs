@@ -8,7 +8,7 @@ import Eval
 import Env
 import Types
 import Parser
-
+import Prim
 
 flushStr :: String -> IO ()
 flushStr str = do
