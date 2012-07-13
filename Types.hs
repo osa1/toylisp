@@ -1,28 +1,13 @@
 {-# LANGUAGE NoMonomorphismRestriction, GADTs, NamedFieldPuns #-}
 {-# OPTIONS_GHC -fno-warn-hi-shadowing #-}
 
---module Types
---    ( LispVal(..)
---    , unwordsList
---    , nullEnv
---    , Env-
---    , makeFunc
---    , makeNormalFunc
---    , makeVarargs
---    , LispError(..)
---    , IOThrowsError
---    , runIOThrows
---    , throwError
---    , Cont(..)
---    ) where
-
 module Types where
 
 import Control.Monad.Error (Error(..), runErrorT, ErrorT(..))
 import Text.ParserCombinators.Parsec (ParseError)
 import Data.List (intercalate)
 
-import Data.IORef
+import Data.IORef (IORef, newIORef)
 
 type Env = IORef [(String, IORef TVal)]
 
@@ -68,7 +53,7 @@ instance Show AnyExpr where
     show (AnyExpr a) = show a
 
 data TType = CharType | StringType | SymbolType | IntType | FloatType | FunctionType
-    | ListType | BoolType | ContinuationType | NilType
+    | ListType | BoolType | ContinuationType | SyntaxType | NilType
   deriving Show
 
 data TVal = Char Char
@@ -85,6 +70,7 @@ data TVal = Char Char
           | TList [TVal]
           | Bool Bool
           | Continuation Cont
+          | Syntax AnyExpr
           | Nil
 
 class Typed e where
@@ -101,6 +87,7 @@ instance Typed TVal where
     typeOf TList{} = ListType
     typeOf Bool{} = BoolType
     typeOf Continuation{} = ContinuationType
+    typeOf Syntax{} = SyntaxType
     typeOf Nil{} = NilType
 
 
@@ -191,7 +178,7 @@ instance Show TError where
 
 instance Show TVal where
     show (Char c) = "#\\" ++ [c]
-    show (String s) = show s
+    show (String s) = s
     show (TSymbol s) = s
     show (Int i) = show i
     show (Float f) = show f
@@ -200,4 +187,5 @@ instance Show TVal where
     show (TList l) = show l
     show (Bool b) = show b
     show Continuation{} = "<Continuation>"
+    show Syntax{} = "<Syntax>"
     show Nil = "Nil"
