@@ -16,55 +16,55 @@ import Env
 import IO
 import Parser
 
---primitives :: [(String, [LispVal] -> IOThrowsError LispVal)]
---primitives = [ ("car", car)
---             , ("cdr", cdr)
---             , ("cons", cons)
---             , ("eqv?", eqv)
+primitives :: [(String, SimpleFunc)]
+primitives = [ ("first", first)
+             , ("rest", rest)
+             , ("cons", cons)
+             --, ("eqv?", eqv)
 
---             , ("+", numericBinop (+))
---             , ("-", numericBinop (-))
---             , ("*", numericBinop (*))
---             , ("/", numericBinop div)
---             , ("mod", numericBinop mod)
---             , ("quotient", numericBinop quot)
---             , ("remainder", numericBinop rem)
+             , ("+", numericBinop (+))
+             , ("-", numericBinop (-))
+             , ("*", numericBinop (*))
+             , ("/", numericBinop div)
+             , ("mod", numericBinop mod)
+             , ("quotient", numericBinop quot)
+             , ("remainder", numericBinop rem)
 
---             , ("=", numBoolBinop (==))
---             , ("<", numBoolBinop (<))
---             , (">", numBoolBinop (>))
---             , ("/=", numBoolBinop (/=))
---             , (">=", numBoolBinop (>=))
---             , ("<=", numBoolBinop (<=))
---             , ("&&", boolBoolBinop (&&))
---             , ("||", boolBoolBinop (||))
---             , ("string=?", strBoolBinop (==))
---             , ("string<?", strBoolBinop (<))
---             , ("string>?", strBoolBinop (>))
---             , ("string<=?", strBoolBinop (<=))
---             , ("string>=?", strBoolBinop (>=))
+             --, ("=", numBoolBinop (==))
+             --, ("<", numBoolBinop (<))
+             --, (">", numBoolBinop (>))
+             --, ("/=", numBoolBinop (/=))
+             --, (">=", numBoolBinop (>=))
+             --, ("<=", numBoolBinop (<=))
+             --, ("&&", boolBoolBinop (&&))
+             --, ("||", boolBoolBinop (||))
+             --, ("string=?", strBoolBinop (==))
+             --, ("string<?", strBoolBinop (<))
+             --, ("string>?", strBoolBinop (>))
+             --, ("string<=?", strBoolBinop (<=))
+             --, ("string>=?", strBoolBinop (>=))
 
---             , ("string?", stringp)
---             , ("symbol?", symbolp)
---             , ("number?", numberp)
---             , ("list?", listp)
---             , ("boolean?", boolp)
---             , ("symbol->string", symbolToString)
---             -- , ("apply", applyProc)
+             , ("string?", stringp)
+             , ("symbol?", symbolp)
+             , ("number?", numberp)
+             , ("list?", listp)
+             , ("boolean?", boolp)
+             , ("symbol->string", symbolToString)
+             ---- , ("apply", applyProc)
 
---             -- IO functions
---             , ("open-input-file", makePort ReadMode)
---             , ("open-output-file", makePort WriteMode)
---             , ("close-input-port", closePort)
---             , ("close-output-port", closePort)
---             , ("read", readProc)
---             , ("write", writeProc)
---             , ("read-contents", readContents)
---             , ("read-all", readAll)
+             ---- IO functions
+             --, ("open-input-file", makePort ReadMode)
+             --, ("open-output-file", makePort WriteMode)
+             --, ("close-input-port", closePort)
+             --, ("close-output-port", closePort)
+             --, ("read", readProc)
+             --, ("write", writeProc)
+             --, ("read-contents", readContents)
+             --, ("read-all", readAll)
 
---             -- read
---             , ("read-form", lispRead)
---             ]
+             ---- read
+             --, ("read-form", lispRead)
+             ]
 
 
 errorOrFalse :: Int -> [TVal] -> IOThrowsError TVal
@@ -74,6 +74,21 @@ errorOrFalse n vals = if length vals /= n then
                           return $ Bool False
 
 -- is there a way to generate this repetitive code?
+first :: SimpleFunc
+first [TList lst] = return $ (head lst)
+first [notList] = throwError $ TypeMismatch ListType (show $ typeOf notList)
+first args = throwError $ NumArgs 1 (length args)
+
+rest :: SimpleFunc
+rest [TList lst] = return $ TList (tail lst)
+rest [notList] = throwError $ TypeMismatch ListType (show $ typeOf notList)
+rest args = throwError $ NumArgs 1 (length args)
+
+cons :: SimpleFunc
+cons [v, TList lst] = return $ TList ([v] ++ lst)
+cons [_, notLst] = throwError $ TypeMismatch ListType (show $ typeOf notLst)
+cons args = throwError $ NumArgs 2 (length args)
+
 stringp :: SimpleFunc
 stringp [String _] = return $ Bool True
 stringp args = errorOrFalse 1 args
@@ -104,9 +119,11 @@ symbolToString [TSymbol s] = return $ String s
 symbolToString [notSymbol] = throwError $ TypeMismatch SymbolType (show $ typeOf notSymbol)
 symbolToString args = throwError $ NumArgs 1 (length args)
 
---numericBinop :: (Integer -> Integer -> Integer) -> [LispVal] -> IOThrowsError LispVal
---numericBinop _ singleVal@[_] = throwError $ NumArgs 2 singleVal
---numericBinop op params = mapM unpackNum params >>= return . Number . foldl1 op
+numericBinop :: (Int -> Int -> Int) -> [TVal] -> IOThrowsError TVal
+numericBinop op params = if length params /= 2 then
+                             throwError $ NumArgs 2 (length params)
+                         else
+                             mapM unpackNum params >>= return . Int . foldl1 op
 
 --boolBinop :: (LispVal -> IOThrowsError a) -> (a -> a -> Bool) -> [LispVal] -> IOThrowsError LispVal
 --boolBinop unpacker op args = if length args /= 2
@@ -115,7 +132,7 @@ symbolToString args = throwError $ NumArgs 1 (length args)
 --                                        right <- unpacker $ args !! 1
 --                                        return $ Bool $ left `op` right
 
---numBoolBinop :: (Integer -> Integer -> Bool) -> [LispVal] -> IOThrowsError LispVal
+--numBoolBinop :: (Integer -> Integer -> Bool) -> [TVal] -> IOThrowsError TVal
 --numBoolBinop = boolBinop unpackNum
 
 --strBoolBinop :: (String -> String -> Bool) -> [LispVal] -> IOThrowsError LispVal
@@ -132,30 +149,9 @@ symbolToString args = throwError $ NumArgs 1 (length args)
 --unpackBool (Bool b) = return b
 --unpackBool notBool = throwError $ TypeMismatch "boolean" notBool
 
---unpackNum :: LispVal -> IOThrowsError Integer
---unpackNum (Number n) = return n
---unpackNum (List [n]) = unpackNum n
---unpackNum notNum = throwError $ TypeMismatch "number" notNum
-
---car :: [LispVal] -> IOThrowsError LispVal
---car [List (x:__)] = return x
---car [DottedList (x:_) _] = return x
---car [badArg] = throwError $ TypeMismatch "pair" badArg
---car badArgList = throwError $ NumArgs 1 badArgList
-
---cdr ::[LispVal] -> IOThrowsError LispVal
---cdr [List (_:xs)] = return $ List xs
---cdr [DottedList (_:fx:xs) x] = return $ DottedList (fx:xs) x
---cdr [DottedList [_] x] = return x
---cdr [badArg] = throwError $ TypeMismatch "pair" badArg
---cdr badArgList = throwError $ NumArgs 1 badArgList
-
---cons :: [LispVal] -> IOThrowsError LispVal
---cons [x1, List []] = return $ List [x1]
---cons [x, List xs] = return $ List $ x : xs
---cons [x, DottedList xs xlast] = return $ DottedList (x : xs) xlast
---cons [x1, x2] = return $ DottedList [x1] x2
---cons badArgList = throwError $ NumArgs 2 badArgList
+unpackNum :: TVal -> IOThrowsError Int
+unpackNum (Int n) = return n
+unpackNum notNum = throwError $ TypeMismatch IntType (show $ typeOf notNum)
 
 --eqv :: [LispVal] -> IOThrowsError LispVal
 --eqv vals = case eqv' vals of
@@ -217,11 +213,11 @@ symbolToString args = throwError $ NumArgs 1 (length args)
 --lispRead [x] = throwError $ TypeMismatch "string" x
 --lispRead args = throwError $ NumArgs 1 args
 
---primitiveBindings :: IO Env
---primitiveBindings =
---    let makeFunc constructor (var, func) = (var, constructor func)
---        addPrimitives = flip bindVars $ map (makeFunc PrimitiveFunc) primitives
---    in nullEnv >>= addPrimitives
+primitiveBindings :: IO Env
+primitiveBindings =
+    let makeFunc constructor (var, func) = (var, constructor func)
+        addPrimitives = flip bindVars $ map (makeFunc SimpleFunc) primitives
+    in nullEnv >>= addPrimitives
 
 eval' :: Env -> AnyExpr -> Cont -> IOThrowsError TVal
 eval' env (AnyExpr expr) = eval env expr
@@ -309,27 +305,3 @@ applyCont (SeqLastCont (x:xs) _ env cont) _ = do
 
 applyCont (SeqLastCont [] (Just v) _ cont) _ = applyCont cont v
 applyCont (SeqLastCont [] Nothing _ cont) _ = applyCont cont Nil
-
-
---applyCont :: Cont -> LispVal -> IOThrowsError LispVal
---applyCont EndCont val = return val
---applyCont (PredCont conseq alt env cont) val = evalCPS env val (TestCont conseq alt env cont)
---applyCont (TestCont conseq _ env cont) (Bool True) = evalCPS env conseq cont
---applyCont (TestCont _ alt env cont) (Bool False) = evalCPS env alt cont
---applyCont TestCont{} notBool = throwError $ TypeMismatch "bool" notBool
---applyCont (SetCont var env cont) form = setVar env var form >>= applyCont cont
-
---applyCont (SeqCont (x:xs) vals env cont) fun = do
---    r <- evalCPS env x EndCont
---    applyCont (SeqCont xs (vals++[r]) env cont) fun
---applyCont (SeqCont [] vals _ cont) fun = applyCPS fun vals cont
-
---applyCont (DefineCont var env cont) form = defineVar env var form >>= applyCont cont
-
---applyCont (SeqLastCont (x:xs) env cont) expr = do
---    evalCPS env expr EndCont
---    applyCont (SeqLastCont xs env cont) x
---applyCont (SeqLastCont [] env cont) expr = evalCPS env expr cont
-
---applyCont _ _ = undefined
-

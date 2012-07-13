@@ -5,6 +5,7 @@ import System.Environment (getArgs)
 
 import System.IO
 import Eval
+import Env
 import Types
 import Parser
 
@@ -21,16 +22,16 @@ readPrompt prompt = do
 
 evalString :: Env -> String -> IO String
 evalString env expr =
-    runIOThrows $ liftM show  $ readExpr expr >>= (\expr -> eval env expr EndCont)
+    runIOThrows $ liftM show  $ readExpr expr >>= (\expr -> eval' env expr EndCont)
 
 evalAndPrint :: Env -> String -> IO ()
 evalAndPrint env expr = evalString env expr >>= putStrLn
 
-runOne :: [String] -> IO ()
-runOne args = do
-    env <- primitiveBindings >>= flip bindVars [("args", List $ map String $ drop 1 args)]
-    r <- runIOThrows $ liftM show $ eval env (List [Symbol "load", String (head args)]) EndCont
-    hPutStrLn stderr r
+--runOne :: [String] -> IO ()
+--runOne args = do
+--    env <- primitiveBindings >>= flip bindVars [("args", List $ map String $ drop 1 args)]
+--    r <- runIOThrows $ liftM show $ eval env (List [Symbol "load", String (head args)]) EndCont
+--    hPutStrLn stderr r
 
 until_ :: Monad m => (a -> Bool) -> m a -> (a -> m ()) -> m ()
 until_ pred prompt action = do
@@ -50,4 +51,5 @@ main = do
     args <- getArgs
     if null args
         then runRepl
-        else runOne args
+        --else runOne args
+        else return ()

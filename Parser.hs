@@ -6,6 +6,7 @@ import Control.Monad
 import Text.ParserCombinators.Parsec
 import Numeric (readFloat)
 import Control.Applicative ((<*))
+import Control.Monad.Error (throwError)
 
 import Types
 import Num
@@ -113,6 +114,7 @@ parseApplication = do
 parseIf :: Parser (Expr If)
 parseIf = do
     spChar '('
+    spString "if"
     pred <- parseAnyExpr
     ifE <- parseAnyExpr
     thenE <- parseAnyExpr
@@ -183,4 +185,12 @@ parseAnyExpr = do
                        , anyExpr $ try parseApplication
                        , anyExpr $ try (parseDelimitedList '(' ')')
                        ]
+
+readOrThrow :: Parser a -> String -> IOThrowsError a
+readOrThrow parser input = case parse parser "expression" input of
+  Left err -> throwError $ Parser err
+  Right val -> return val
+
+readExpr :: String -> IOThrowsError AnyExpr
+readExpr = readOrThrow parseAnyExpr
 
