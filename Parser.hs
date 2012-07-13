@@ -149,7 +149,7 @@ parseDefine = do
   spChar '('
   spString "define"
   name <- parseSymbol
-  params <- optionMaybe parseArgList
+  params <- optionMaybe $ try parseArgList
   (case params of
      Nothing -> do def <- parseAnyExpr
                    return $ Define name def
