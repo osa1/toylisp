@@ -12,9 +12,13 @@ import Types
 import Prim
 import Env
 
+--evalForm :: TFexpr
+--evalForm env [Syntax exprs] = eval' env exprs EndCont
+--evalForm _ [notSyntax] = throwError $ TypeMismatch SyntaxType (typeOf notSyntax)
+--evalForm _ params = throwError $ NumArgs 1 (length params)
+
 eval' :: Env -> AnyExpr -> Cont -> IOThrowsError TVal
 eval' env (AnyExpr expr) = eval env expr
-
 
 eval :: Env -> Expr a -> Cont -> IOThrowsError TVal
 eval env (Symbol s) cont = getVar env s >>= applyCont cont
@@ -68,10 +72,11 @@ apply (Func params varargs body closure) args cont =
             Nothing -> return env
 
         evalBody :: Env -> IOThrowsError TVal
-        evalBody env = applyCont (SeqLastCont body Nothing env cont) Nil
+        evalBody env = applyCont (SeqLastCont body env cont) Nil
         -- FIXME: maybe I should completely remove last parameter of applyCont
 
 apply (Continuation c) [param] _ = applyCont c param
+apply (Continuation c) [] _ = applyCont c Nil
 
 apply wtf _ _ = throwError $ TypeMismatch FunctionType (typeOf wtf)
 
@@ -90,9 +95,12 @@ applyCont (ApplyCont [] args _ cont) fun = apply fun args cont
 applyCont (DefineCont name env cont) val = defineVar env name val >>= applyCont cont
 applyCont (SetCont name env cont) val = setVar env name val >>= applyCont cont
 
-applyCont (SeqLastCont (x:xs) _ env cont) _ = do
-    r <- eval' env x EndCont
-    applyCont (SeqLastCont xs (Just r) env cont) Nil
+-- FIXME: there are some errors in SeqLastCont
+-- Try this:
+     --(define cont #f)
+     --(define test () ((lambda (i) (call/cc (lambda (k) (set! cont k))) (set! i (+ i 1)) i) 0))
+     --(cont)
+applyCont (SeqLastCont (x:xs) env cont) _ =
+    eval' env x (SeqLastCont xs env cont)
 
-applyCont (SeqLastCont [] (Just v) _ cont) _ = applyCont cont v
-applyCont (SeqLastCont [] Nothing _ cont) _ = applyCont cont Nil
+applyCont (SeqLastCont [] _ cont) v = applyCont cont v

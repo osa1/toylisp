@@ -43,7 +43,7 @@ data Expr a where
     Set :: Expr Symbol -> AnyExpr -> Expr Set
 
 type SimpleFunc = [TVal] -> IOThrowsError TVal
-type TFexpr = Env -> [AnyExpr] -> TVal
+type TFexpr = Env -> [TVal] -> IOThrowsError TVal
 type TMacro = Expr List -> Expr List
 
 data AnyExpr where
@@ -141,7 +141,7 @@ data Cont = EndCont
           | DefineCont String Env Cont
           -- Function application
           | ApplyCont [AnyExpr] [TVal] Env Cont
-          | SeqLastCont [AnyExpr] (Maybe TVal) Env Cont
+          | SeqLastCont [AnyExpr] Env Cont
 
 
 -- Show instances ------------------------------------------------------------------
