@@ -149,9 +149,12 @@ parseDefine = do
   spChar '('
   spString "define"
   name <- parseSymbol
-  def <- parseAnyExpr
-  spChar ')'
-  return $ Define name def
+  params <- optionMaybe parseArgList
+  (case params of
+     Nothing -> do def <- parseAnyExpr
+                   return $ Define name def
+     Just ps -> do def <- many1 parseAnyExpr
+                   return $ Define name (AnyExpr $ Lambda ps def)) <* spChar ')'
 
 parseSet :: Parser (Expr Set)
 parseSet = do
@@ -169,22 +172,38 @@ parseDispatch :: Parser (Expr List)
 parseDispatch = undefined
 
 parseAnyExpr :: Parser AnyExpr
+--parseAnyExpr = do
+--    spaces
+--    (char '#' >> anyExpr parseDispatch)
+--           <|> choice  [ val $ try parseBool
+--                       , val $ try parseNumber
+--                       , val $ try parseString
+--                       , anyExpr $ try parseSymbol
+--                       , anyExpr $ try parseLambda
+--                       , anyExpr $ try parseIf
+--                       , anyExpr $ try parseEval
+--                       , anyExpr $ try parseCallCC
+--                       , anyExpr $ try parseDefine
+--                       , anyExpr $ try parseSet
+--                       , anyExpr $ try parseApplication
+--                       , anyExpr $ try (parseDelimitedList '(' ')')
+--                       ]
 parseAnyExpr = do
     spaces
-    (char '#' >> anyExpr parseDispatch)
-           <|> choice  [ val $ try parseBool
-                       , val $ try parseNumber
-                       , val $ try parseString
-                       , anyExpr $ try parseSymbol
-                       , anyExpr $ try parseLambda
-                       , anyExpr $ try parseIf
-                       , anyExpr $ try parseEval
-                       , anyExpr $ try parseCallCC
-                       , anyExpr $ try parseDefine
-                       , anyExpr $ try parseSet
-                       , anyExpr $ try parseApplication
-                       , anyExpr $ try (parseDelimitedList '(' ')')
-                       ]
+    choice  [ val $ try parseBool
+            , val $ try parseChar
+            , val $ try parseNumber
+            , val $ try parseString
+            , anyExpr $ try parseSymbol
+            , anyExpr $ try parseLambda
+            , anyExpr $ try parseIf
+            , anyExpr $ try parseEval
+            , anyExpr $ try parseCallCC
+            , anyExpr $ try parseDefine
+            , anyExpr $ try parseSet
+            , anyExpr $ try parseApplication
+            , anyExpr $ try (parseDelimitedList '(' ')')
+            ]
 
 readOrThrow :: Parser a -> String -> IOThrowsError a
 readOrThrow parser input = case parse parser "expression" input of
@@ -194,3 +213,7 @@ readOrThrow parser input = case parse parser "expression" input of
 readExpr :: String -> IOThrowsError AnyExpr
 readExpr = readOrThrow parseAnyExpr
 
+readAsSyntax :: String -> IOThrowsError TVal
+readAsSyntax str = case parse parseAnyExpr "syntax" str of
+  Left err -> throwError $ Parser err
+  Right val -> return $ Syntax val
