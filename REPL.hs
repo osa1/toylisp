@@ -9,6 +9,9 @@ import Env
 import Types
 import Parser
 import Prim
+import Control.Monad.IO.Class (liftIO)
+
+import System.Console.Haskeline
 
 flushStr :: String -> IO ()
 flushStr str = do
@@ -44,12 +47,28 @@ runRepl = do
     evalString env "(load \"stdlib.scm\")"
     until_ (== "quit") (readPrompt "λ> ") (evalAndPrint env)
 
+completeFun :: Monad m => String -> m [Completion]
+completeFun s = return $ map simpleCompletion (prims ++ specials)
 
+  where prims = map fst $ filter (\(n,_) -> take (length s) n == s) primitives
+        specials = [] -- TODO
+
+wordComplete :: Monad m => CompletionFunc m
+wordComplete = completeWord Nothing " \t()\"\'#%" completeFun
 
 main :: IO ()
 main = do
     args <- getArgs
-    if null args
-        then runRepl
-        --else runOne args
-        else return ()
+    env <- primitiveBindings
+    if null args then
+        runInputT (setComplete wordComplete defaultSettings) (loop env)
+    else
+        return ()
+  where loop :: Env -> InputT IO ()
+        loop env = do
+          minput <- getInputLine "λ> "
+          case minput of
+              Nothing -> return ()
+              Just "quit" -> return ()
+              Just input -> do liftIO $ evalAndPrint env input
+                               loop env
