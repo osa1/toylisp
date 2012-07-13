@@ -5,7 +5,6 @@ module Parser where
 import Control.Monad
 import Text.ParserCombinators.Parsec
 import Numeric (readFloat)
-import Control.Monad.Error
 import Control.Applicative ((<*))
 
 import Types
@@ -101,7 +100,7 @@ parseLambda = do
     return $ Lambda args body
 
 parseLambdaOrFun :: Parser (Either (Expr Symbol) (Expr Lambda))
-parseLambdaOrFun = (liftM Right parseLambda <|> liftM Left parseSymbol)
+parseLambdaOrFun = liftM Right parseLambda <|> liftM Left parseSymbol
 
 parseApplication :: Parser (Expr Application)
 parseApplication = do
@@ -128,78 +127,60 @@ parseEval = do
     spChar ')'
     return $ EvalExp expr
 
+parseDelimitedList :: Char -> Char -> Parser (Expr List)
+parseDelimitedList o c = do
+    spChar o
+    lst <- many parseAnyExpr
+    spChar c
+    return $ List lst
+
 parseCallCC :: Parser (Expr CallCC)
 parseCallCC = do
     spChar '('
     spString "call/cc"
     fun <- parseLambdaOrFun
-    body <- many1 parseAnyExpr
     spChar ')'
-    return $ CallCC fun body
+    return $ CallCC fun
+
+parseDefine :: Parser (Expr Define)
+parseDefine = do
+  spChar '('
+  spString "define"
+  name <- parseSymbol
+  def <- parseAnyExpr
+  spChar ')'
+  return $ Define name def
+
+parseSet :: Parser (Expr Set)
+parseSet = do
+  spChar '('
+  spString "set!"
+  name <- parseSymbol
+  def <- parseAnyExpr
+  spChar ')'
+  return $ Set name def
 
 anyExpr = liftM AnyExpr
 val a = anyExpr $ liftM Val a
 
+parseDispatch :: Parser (Expr List)
+parseDispatch = undefined
+
 parseAnyExpr :: Parser AnyExpr
-parseAnyExpr = choice  [ val $ try parseBool
+parseAnyExpr = do
+    spaces
+    (char '#' >> anyExpr parseDispatch)
+           <|> choice  [ val $ try parseBool
                        , val $ try parseNumber
                        , val $ try parseString
                        , anyExpr $ try parseSymbol
                        , anyExpr $ try parseLambda
-                       , anyExpr $ try parseApplication
                        , anyExpr $ try parseIf
                        , anyExpr $ try parseEval
                        , anyExpr $ try parseCallCC
+                       , anyExpr $ try parseDefine
+                       , anyExpr $ try parseSet
+                       , anyExpr $ try parseApplication
+                       , anyExpr $ try (parseDelimitedList '(' ')')
                        ]
-
-
-
-
---parseList :: Parser LispVal
---parseList = liftM List $ parseExpr `sepBy` spaces
-
---parseDottedList :: Parser LispVal
---parseDottedList = do
---  head <- parseExpr `endBy` spaces
---  tail <- char '.' >> spaces >> parseExpr
---  --tail <- char '.' >> spaces >> parseExpr
---  return $ DottedList head tail
-
---parseQuoted :: Parser LispVal
---parseQuoted = do
---  char '\''
---  x <- parseExpr
---  return $ List [Atom "quote", x]
-
---parseDelimitedList :: Char -> Char -> Parser LispVal
---parseDelimitedList open close = do
---    char open
---    x <- try parseList <|> parseDottedList
---    char close
---    return x
-
---makeVector :: LispVal -> LispVal
---makeVector (List lst) = List $ Atom "vector" : lst
-
---parseExpr :: Parser LispVal
---parseExpr = parseNumber
---        <|> parseString
---        <|> parseAtom
---        <|> parseChar
---        <|> parseQuoted
---        -- <|> parseQuasiquotation
---        -- <|> parseDispatchMacro
---        <|> liftM makeVector (parseDelimitedList '[' ']')
---        <|> parseDelimitedList '(' ')'
-
---readOrThrow :: Parser a -> String -> IOThrowsError a
---readOrThrow parser input = case parse parser "lisp" input of
---    Left err -> throwError $ Parser err
---    Right val -> return val
-
---readExpr :: String -> IOThrowsError LispVal
---readExpr = readOrThrow parseExpr
-
---readExprList :: String -> IOThrowsError [LispVal]
---readExprList = readOrThrow (endBy parseExpr spaces)
 

@@ -5,7 +5,7 @@
 --    ( LispVal(..)
 --    , unwordsList
 --    , nullEnv
---    , Env
+--    , Env-
 --    , makeFunc
 --    , makeNormalFunc
 --    , makeVarargs
@@ -18,14 +18,13 @@
 
 module Types where
 
-import Control.Monad.Error
+import Control.Monad.Error (Error(..), runErrorT, ErrorT(..))
 import Text.ParserCombinators.Parsec (ParseError)
-import System.IO (Handle)
 import Data.List (intercalate)
 
 import Data.IORef
 
-type Env = IORef [(String, IORef Val)]
+type Env = IORef [(String, IORef TVal)]
 
 nullEnv :: IO Env
 nullEnv = newIORef []
@@ -36,8 +35,11 @@ data Application
 data If
 data Fexpr
 data Val
+data List
 data EvalExp
 data CallCC
+data Define
+data Set
 
 data Expr a where
     Symbol :: String -> Expr Symbol
@@ -46,33 +48,18 @@ data Expr a where
     If :: AnyExpr -> AnyExpr -> AnyExpr -> Expr If
     Fexpr :: [Expr Symbol] -> [AnyExpr] -> Expr Fexpr
     Val :: TVal -> Expr Val
+    List :: [AnyExpr] -> Expr List
 
     -- Special forms
     EvalExp :: AnyExpr -> Expr EvalExp
-    CallCC :: Either (Expr Symbol) (Expr Lambda) -> [AnyExpr] -> Expr CallCC
+    CallCC :: Either (Expr Symbol) (Expr Lambda) -> Expr CallCC
 
-instance Show (Expr a) where
-    show (Symbol str) = str
-    show (Lambda params body) = "(lambda (" ++ intercalate " " (map show params) ++ ") " ++ intercalate " " (map show body) ++ ")"
-    show (Application (Left fun) params) = "(" ++ show fun ++ " " ++ intercalate " " (map show params) ++ ")"
-    show (Application (Right lambda) params) = "(" ++ show lambda ++ " " ++ intercalate " " (map show params) ++ ")"
-    show (If ifE thenE elseE) = "(" ++ intercalate "," [show ifE, show thenE, show elseE] ++ ")"
-    show (Fexpr params body) = "(fexpr (" ++ intercalate " " (map show params) ++ ") " ++ intercalate " " (map show body) ++ ")"
-    show (Val tval) = show tval
+    Define :: Expr Symbol -> AnyExpr -> Expr Define
+    Set :: Expr Symbol -> AnyExpr -> Expr Set
 
-    show (EvalExp expr) = "(eval " ++ show expr ++ ")"
-    show (CallCC (Left fun) exprs) = show "(call/cc " ++ show fun ++ intercalate " " (map show exprs) ++ ")"
-    show (CallCC (Right lambda) exprs) = show "(call/cc " ++ show lambda ++ intercalate " " (map show exprs) ++ ")"
-
-
-data Func = Func { params :: [Expr Symbol]
-                 , varargs :: Maybe (Expr Symbol)
-                 , body :: [AnyExpr]
-                 , closure :: Env
-                 }
-
-instance Show Func where
-    show Func{params} = "<Function " ++ show params ++ " >"
+type SimpleFunc = [TVal] -> IOThrowsError TVal
+type TFexpr = Env -> [AnyExpr] -> TVal
+type TMacro = Expr List -> Expr List
 
 data AnyExpr where
     AnyExpr :: Expr a -> AnyExpr
@@ -80,131 +67,137 @@ data AnyExpr where
 instance Show AnyExpr where
     show (AnyExpr a) = show a
 
+data TType = CharType | StringType | SymbolType | IntType | FloatType | FunctionType
+    | ListType | BoolType | ContinuationType | NilType
+  deriving Show
+
 data TVal = Char Char
           | String String
+          | TSymbol String
           | Int Int
           | Float Float
-          | Function Func
-          | List [AnyExpr]
+          | Func { params :: [Expr Symbol]
+                 , varargs :: Maybe (Expr Symbol)
+                 , body :: [AnyExpr]
+                 , closure :: Env
+                 }
+          | SimpleFunc SimpleFunc
+          | TList [TVal]
           | Bool Bool
+          | Continuation Cont
           | Nil
-    deriving Show
+
+class Typed e where
+    typeOf :: e -> TType
+
+instance Typed TVal where
+    typeOf Char{} = CharType
+    typeOf String{} = StringType
+    typeOf TSymbol{} = SymbolType
+    typeOf Int{} = IntType
+    typeOf Float{} = FloatType
+    typeOf Func{} = FunctionType
+    typeOf SimpleFunc{} = FunctionType
+    typeOf TList{} = ListType
+    typeOf Bool{} = BoolType
+    typeOf Continuation{} = ContinuationType
+    typeOf Nil{} = NilType
+
+
+-- Errors
+
+data TError = NumArgs Int Int
+            | TypeMismatch TType String
+            | Parser ParseError
+            | BadSpecialForm String AnyExpr
+            | NotFunc String String
+            | UnboundVar String String
+            | Default String
+
+instance Error TError where
+    noMsg = Default "An error has occured"
+    strMsg = Default
+
+type IOThrowsError = ErrorT TError IO
+
+-- used in REPL
+runIOThrows :: IOThrowsError String -> IO String
+runIOThrows action = do
+    r <- runErrorT action
+    return $ extractValue r
+
+extractValue :: Either TError String -> String
+extractValue (Right val) = val
+extractValue (Left err) = show err
+
+unwordsList :: [AnyExpr] -> String
+unwordsList = unwords . map (\(AnyExpr e) -> show e)
+
+
+-- Function constructors
+makeFunc :: Maybe (Expr Symbol) -> Env -> [Expr Symbol] -> [AnyExpr] -> IOThrowsError TVal
+makeFunc varargs env params body = return $ Func params varargs body env
+
+makeNormalFunc :: Env -> [Expr Symbol] -> [AnyExpr] -> IOThrowsError TVal
+makeNormalFunc = makeFunc Nothing
+
+makeVarargs :: Expr Symbol -> Env -> [Expr Symbol] -> [AnyExpr] -> IOThrowsError TVal
+makeVarargs = makeFunc . Just
 
 
 -- Continuations
 
---data Cont = EndCont
---          | PredCont LispVal LispVal Env Cont
---          | TestCont LispVal LispVal Env Cont
---          | SetCont String Env Cont
---          | DefineCont String Env Cont
---          | SeqCont [LispVal] [LispVal] Env Cont
---          | SeqLastCont [LispVal] Env Cont
---          | ArgsCont [LispVal] [LispVal] Env Cont
+data Cont = EndCont
+          | PredCont AnyExpr AnyExpr Env Cont
+          -- | TestCont AnyExpr AnyExpr Env Cont
+          | SetCont String Env Cont
+          | DefineCont String Env Cont
+          -- Function application
+          | ApplyCont [AnyExpr] [TVal] Env Cont
+          | SeqLastCont [AnyExpr] (Maybe TVal) Env Cont
 
 
+-- Show instances ------------------------------------------------------------------
 
---data LispVal = Atom String
---             | List [LispVal]
---             | DottedList [LispVal] LispVal
---             | Number Integer
---             | String String
---             | Character Char
---             | Float Float
---             | Bool Bool
+instance Show (Expr a) where
+    show (Symbol str) = str
+    show (Lambda params body) = "(lambda (" ++ unwords (map show params) ++ ") " ++ unwords (map show body) ++ ")"
+    show (Application (Left fun) params) = "(" ++ show fun ++ " " ++ unwords (map show params) ++ ")"
+    show (Application (Right lambda) params) = "(" ++ show lambda ++ " " ++ unwords (map show params) ++ ")"
+    show (If ifE thenE elseE) = "(" ++ intercalate "," [show ifE, show thenE, show elseE] ++ ")"
+    show (Fexpr params body) = "(fexpr (" ++ unwords (map show params) ++ ") " ++ unwords (map show body) ++ ")"
+    show (Val tval) = show tval
+    show (List exprs) = "(" ++ unwords (map show exprs) ++ ")"
 
---             | PrimitiveFunc ([LispVal] -> IOThrowsError LispVal)
---             | Func { params :: [String]
---                    , vararg :: Maybe String
---                    , body :: [LispVal]
---                    , closure :: Env
---                    }
+    show (EvalExp expr) = "(eval " ++ show expr ++ ")"
+    show (CallCC (Left fun)) = show "(call/cc " ++ show fun ++ ")"
+    show (CallCC (Right lambda)) = show "(call/cc " ++ show lambda ++ ")"
 
---             | IOFunc ([LispVal] -> IOThrowsError LispVal)
---             | Port Handle
-
---             | Continuation Cont
-
---instance Show LispVal where
---    show (String contents) = "\"" ++ contents ++ "\""
---    show (Character char) = "'" ++ [char] ++ "'"
---    show (Atom name) = name
---    show (Number contents) = show contents
---    show (Float float) = show float
---    show (Bool True) = "#t"
---    show (Bool False) = "#f"
---    show (List contents) = "(" ++ unwordsList contents ++ ")"
---    show (DottedList head tail) = "(" ++ unwordsList head ++ " . " ++ show tail ++ ")"
---    show (PrimitiveFunc _) = "<primitive>"
---    show (Func args varargs _ _) =
---        "(lambda (" ++ unwords (map show args) ++
---            (case varargs of
---                Nothing -> ") ...)"
---                Just arg -> " . " ++ arg ++ ") ...)")
---    show (Port _) = "<IO port>"
---    show (IOFunc _) = "<IO primitive>"
---    show (Continuation _) = "<Continuation>"
-
---makeFunc :: Maybe String -> Env -> [LispVal] -> [LispVal] -> IOThrowsError LispVal
---makeFunc varargs env params body = return $ Func (map show params) varargs body env
-
---makeNormalFunc :: Env -> [LispVal] -> [LispVal] -> IOThrowsError LispVal
---makeNormalFunc = makeFunc Nothing
-
---makeVarargs :: (Show a) => a -> Env -> [LispVal] -> [LispVal] -> IOThrowsError LispVal
---makeVarargs = makeFunc . Just . show
-
---unwordsList :: [LispVal] -> String
---unwordsList = unwords . map show
+    show (Define (Symbol name) body) = show "(define " ++ name ++ " " ++ show body ++ ")"
+    show (Set (Symbol name) body) = show "(set! " ++ name ++ " " ++ show body ++ ")"
 
 
----- Error types
-
---data LispError = NumArgs Int [LispVal]
---               | TypeMismatch String LispVal
---               | Parser ParseError
---               | BadSpecialForm String LispVal
---               | NotFunction String String
---               | UnboundVar String String
---               | Default String
-
---instance Show LispError where
---    show (Default message) = message
---    show (UnboundVar message varname) = message ++ ": " ++ varname
---    show (BadSpecialForm message form) = message ++ ": " ++ show form
---    show (NotFunction message func) = message ++ ": " ++ show func
---    show (NumArgs expected found) = "Expected " ++ show expected ++
---                                    " args: found values " ++ unwordsList found
---    show (TypeMismatch expected found) = "Invalid type: expected " ++ expected ++
---                                         ", found " ++ show found
---    show (Parser parseErr) = "Parse error at " ++ show parseErr
-
---instance Error LispError where
---    noMsg = Default "An error has occured"
---    strMsg = Default
-
---type IOThrowsError = ErrorT LispError IO
-
----- used in REPL
---runIOThrows :: IOThrowsError String -> IO String
---runIOThrows action = do
---    r <- runErrorT action
---    return $ extractValue r
-
---extractValue :: Either LispError String -> String
---extractValue (Right val) = val
---extractValue (Left err) = show err
+instance Show TError where
+    show (Default message) = message
+    show (UnboundVar message varname) = message ++ ": " ++ varname
+    show (BadSpecialForm message form) = message ++ ": " ++ show form
+    show (NotFunc message func) = message ++ ": " ++ show func
+    show (NumArgs expected found) = "Expected " ++ show expected ++
+                                    " args: found " ++ show found
+    show (TypeMismatch expected found) = "Invalid type: expected " ++ show expected ++
+                                         ", found " ++ found
+    show (Parser parseErr) = "Parse error at " ++ show parseErr
 
 
----- Continuations
-
---data Cont = EndCont
---          | PredCont LispVal LispVal Env Cont
---          | TestCont LispVal LispVal Env Cont
---          | SetCont String Env Cont
---          | DefineCont String Env Cont
---          | SeqCont [LispVal] [LispVal] Env Cont
---          | SeqLastCont [LispVal] Env Cont
---          | ArgsCont [LispVal] [LispVal] Env Cont
-
-
+instance Show TVal where
+    show (Char c) = "#\\" ++ [c]
+    show (String s) = show s
+    show (TSymbol s) = s
+    show (Int i) = show i
+    show (Float f) = show f
+    show Func{} = "<Function>"
+    show SimpleFunc{} = "<Function>"
+    show (TList l) = show l
+    show (Bool b) = show b
+    show Continuation{} = "<Continuation>"
+    show Nil = "Nil"

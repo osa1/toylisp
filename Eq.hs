@@ -14,6 +14,7 @@ instance Eq (Expr a) where
     If i1 t1 e1 == If i2 t2 e2 = i1 == i2 && t1 == t2 && e1 == e2
     Fexpr p1 b1 == Fexpr p2 b2 = p1 == p2 && b1 == b2
     Val v1 == Val v2 = v1 == v2
+    List e1 == List e2 = e1 == e2
     EvalExp e1 == EvalExp e2 = e1 == e2
     CallCC c1 b1 == CallCC c2 b2 = c1 == c2 && b1 == b2
 
