@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -Wall -fno-warn-hi-shadowing -fno-warn-unused-do-bind -fno-warn-name-shadowing #-}
+{-# LANGUAGE GADTs #-}
 module Prim
     ( primitives
     , primitiveBindings
@@ -9,6 +10,7 @@ import Control.Monad.Error (throwError)
 import IO
 import Parser (readAsSyntax)
 import Env
+import Eval (eval')
 import Eq ()
 
 primitives :: [(String, SimpleFunc)]
@@ -67,6 +69,9 @@ primitives = [ ("first", first)
              -- eval
              --("eval", evalForm)
              ]
+
+fexprs :: [(String, TFexpr)]
+fexprs = [ ("apply", applyProc) ]
 
 
 errorOrFalse :: Int -> [TVal] -> IOThrowsError TVal
@@ -223,8 +228,14 @@ readForm [String form] = readAsSyntax form
 readForm [x] = throwError $ TypeMismatch StringType (typeOf x)
 readForm args = throwError $ NumArgs 1 (length args)
 
+applyProc :: TFexpr
+applyProc env [fun,(AnyExpr (List params))] cont = eval' env fun (ApplyCont params [] env cont)
+applyProc env (fun:params) cont = eval' env fun (ApplyCont params [] env cont)
+applyProc _ params _ = throwError $ NumArgs 1 (length params)
+
 primitiveBindings :: IO Env
 primitiveBindings =
     let makeFunc constructor (var, func) = (var, constructor func)
         addPrimitives = flip bindVars $ map (makeFunc SimpleFunc) primitives
-    in nullEnv >>= addPrimitives
+        addFexprs = flip bindVars $ map (makeFunc TFexpr) fexprs
+    in nullEnv >>= addPrimitives >>= addFexprs

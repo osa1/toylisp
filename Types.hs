@@ -32,7 +32,7 @@ data Expr a where
     --Application :: Either (Expr Symbol) (Expr Lambda) -> [AnyExpr] -> Expr Application
     Application :: AnyExpr -> [AnyExpr] -> Expr Application
     If :: AnyExpr -> AnyExpr -> AnyExpr -> Expr If
-    Fexpr :: [Expr Symbol] -> [AnyExpr] -> Expr Fexpr
+    Fexpr :: [Expr Symbol] -> [TVal] -> Expr Fexpr
     Val :: TVal -> Expr Val
     List :: [AnyExpr] -> Expr List
 
@@ -44,7 +44,7 @@ data Expr a where
     Set :: Expr Symbol -> AnyExpr -> Expr Set
 
 type SimpleFunc = [TVal] -> IOThrowsError TVal
-type TFexpr = Env -> [TVal] -> IOThrowsError TVal
+type TFexpr = Env -> [AnyExpr] -> Cont -> IOThrowsError TVal
 type TMacro = Expr List -> Expr List
 
 data AnyExpr where
@@ -54,7 +54,7 @@ instance Show AnyExpr where
     show (AnyExpr a) = show a
 
 data TType = CharType | StringType | SymbolType | IntType | FloatType | FunctionType
-    | ListType | BoolType | ContinuationType | SyntaxType | NilType
+    | ListType | BoolType | ContinuationType | SyntaxType | FexprType | NilType
   deriving (Show, Eq)
 
 data TVal = Char Char
@@ -68,6 +68,7 @@ data TVal = Char Char
                  , closure :: Env
                  }
           | SimpleFunc SimpleFunc
+          | TFexpr TFexpr
           | TList [TVal]
           | Bool Bool
           | Continuation Cont
@@ -86,6 +87,7 @@ instance Typed TVal where
     typeOf Float{} = FloatType
     typeOf Func{} = FunctionType
     typeOf SimpleFunc{} = FunctionType
+    typeOf TFexpr{} = FexprType
     typeOf TList{} = ListType
     typeOf Bool{} = BoolType
     typeOf Continuation{} = ContinuationType
@@ -132,7 +134,6 @@ makeNormalFunc = makeFunc Nothing
 
 makeVarargs :: Expr Symbol -> Env -> [Expr Symbol] -> [AnyExpr] -> IOThrowsError TVal
 makeVarargs = makeFunc . Just
-
 
 -- Continuations
 
@@ -189,6 +190,7 @@ instance Show TVal where
     show (Float f) = show f
     show Func{} = "<Function>"
     show SimpleFunc{} = "<Function>"
+    show TFexpr{} = "<Fexpr>"
     show (TList l) = show l
     show (Bool b) = show b
     show Continuation{} = "<Continuation>"

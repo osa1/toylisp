@@ -11,24 +11,26 @@ import Types
 import Env
 
 --evalForm :: TFexpr
---evalForm env [Syntax exprs] = eval' env exprs EndCont
---evalForm _ [notSyntax] = throwError $ TypeMismatch SyntaxType (typeOf notSyntax)
---evalForm _ params = throwError $ NumArgs 1 (length params)
+--evalForm env [form] cont =
+--    eval' env form cont
+--evalForm _ args _ = throwError $ NumArgs 1 (length args)
 
 eval' :: Env -> AnyExpr -> Cont -> IOThrowsError TVal
 eval' env (AnyExpr expr) = eval env expr
 
 eval :: Env -> Expr a -> Cont -> IOThrowsError TVal
-eval env (Symbol s) cont = getVar env s >>= applyCont cont
+eval env (Symbol s) cont = do
+    liftIO $ putStrLn ("getVar " ++ show s)
+    getVar env s >>= applyCont cont
+--eval env (Symbol s) cont = getVar env s >>= applyCont cont
 eval env (Lambda params body) cont = makeNormalFunc env params body >>= applyCont cont
 
 -- Function application
+-- TODO: Implement apply function as Fexpr
+--eval env (Application (AnyExpr (Symbol "apply")) [AnyExpr fun,AnyExpr (List params)]) cont =
+--    eval env fun (ApplyCont params [] env cont)
 eval env (Application (AnyExpr e) params) cont =
     eval env e (ApplyCont params [] env cont)
---eval env (Application (Left (Symbol fun)) params) cont =
---    getVar env fun >>= applyCont (ApplyCont params [] env cont)
---eval env (Application (Right lambda) params) cont =
---    eval env lambda (ApplyCont params [] env cont)
 
 eval env (Define (Symbol name) body) cont = eval' env body (DefineCont name env cont)
 eval env (Set (Symbol name) body) cont = eval' env body (SetCont name env cont)
@@ -41,9 +43,6 @@ eval _ (Fexpr _ _) _ = do
     undefined
 
 eval _ (Val v) cont = applyCont cont v
---eval _ (List _) _ = do
---    liftIO $ putStrLn "Lists are not yet implemented."
---    undefined -- TODO: why did I add this?
 
 eval _ (List []) cont = applyCont cont (TList [])
 eval env (List (x:xs)) cont =
@@ -77,7 +76,11 @@ apply (Func params varargs body closure) args cont =
 
         evalBody :: Env -> IOThrowsError TVal
         evalBody env = applyCont (SeqLastCont body env cont) Nil
-        -- FIXME: maybe I should completely remove last parameter of applyCont
+
+-- For debugging purposes
+apply (TFexpr _) _ _ = do
+    liftIO $ putStrLn "error: call apply on fexpr"
+    undefined
 
 apply (Continuation c) [param] _ = applyCont c param
 apply (Continuation c) [] _ = applyCont c Nil
@@ -91,10 +94,10 @@ applyCont (PredCont _ elseE env cont) (Bool False) = eval' env elseE cont
 applyCont (PredCont thenE _ env cont) _ = eval' env thenE cont
 
 -- TODO: remove RemoveMe
+applyCont (ApplyCont args _ env cont) (TFexpr fexpr) = do
+    fexpr env args cont
 applyCont (ApplyCont (x:xs) args env cont) fun = do
     eval' env x (RemoveMeCont xs args fun env cont)
-    --r <- eval' env x EndCont
-    --applyCont (ApplyCont xs (args++[r]) env cont) fun
 applyCont (ApplyCont [] args _ cont) fun = apply fun args cont
 
 applyCont (SeqCont (x:xs) vals env cont) val =
