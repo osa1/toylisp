@@ -5,7 +5,17 @@ module Eq where
 
 import Types
 
-instance Eq TVal
+instance Eq TVal where
+    -- Maybe I should throw an error for testing continuations and functions
+    Char c1 == Char c2 = c1 == c2
+    String s1 == String s2 = s1 == s2
+    TSymbol s1 == TSymbol s2 = s1 == s2
+    Int i1 == Int i2 = i1 == i2
+    Float f1 == Float f2 = f1 == f2
+    Bool b1 == Bool b2 = b1 == b2
+    Nil == Nil = True
+    t1 == t2 = if typeOf t1 /= typeOf t2 then False else undefined
+
 
 instance Eq (Expr a) where
     Symbol s1 == Symbol s2 = s1 == s2
@@ -16,7 +26,7 @@ instance Eq (Expr a) where
     Val v1 == Val v2 = v1 == v2
     List e1 == List e2 = e1 == e2
     EvalExp e1 == EvalExp e2 = e1 == e2
-    CallCC c1 b1 == CallCC c2 b2 = c1 == c2 && b1 == b2
+    CallCC c1 == CallCC c2 = c1 == c2
 
     _ == _ = False
 
