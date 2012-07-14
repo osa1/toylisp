@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wall -fno-warn-hi-shadowing -fno-warn-unused-do-bind -fno-warn-name-shadowing #-}
 module REPL where
 
 import Control.Monad
@@ -40,12 +41,6 @@ until_ :: Monad m => (a -> Bool) -> m a -> (a -> m ()) -> m ()
 until_ pred prompt action = do
     result <- prompt
     unless (pred result) $ action result >> until_ pred prompt action
-
-runRepl :: IO ()
-runRepl = do
-    env <- primitiveBindings
-    evalString env "(load \"stdlib.scm\")"
-    until_ (== "quit") (readPrompt "λ> ") (evalAndPrint env)
 
 completeFun :: Monad m => String -> m [Completion]
 completeFun s = return $ map simpleCompletion (prims ++ specials)

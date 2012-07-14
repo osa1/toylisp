@@ -1,5 +1,4 @@
-{-# OPTIONS_GHC -fno-warn-unused-do-bind -fno-warn-hi-shadowing #-}
-
+{-# OPTIONS_GHC -Wall -fno-warn-hi-shadowing -fno-warn-unused-do-bind -fno-warn-name-shadowing #-}
 module Parser where
 
 import Control.Monad

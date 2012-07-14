@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -Wall -fno-warn-hi-shadowing -fno-warn-unused-do-bind -fno-warn-name-shadowing #-}
+
 -- IO functions
 
 module IO where

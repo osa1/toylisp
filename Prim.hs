@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wall -fno-warn-hi-shadowing -fno-warn-unused-do-bind -fno-warn-name-shadowing #-}
 module Prim
     ( primitives
     , primitiveBindings
@@ -18,10 +19,10 @@ primitives = [ ("first", first)
              , ("+", numericBinop (+))
              , ("-", numericBinop (-))
              , ("*", numericBinop (*))
-             , ("/", numericBinop div)
+             , ("div", numericBinop div)
              , ("mod", numericBinop mod)
-             , ("quotient", numericBinop quot)
-             , ("remainder", numericBinop rem)
+             , ("quot", numericBinop quot)
+             , ("rem", numericBinop rem)
 
              , ("=", numBoolBinop (==))
              , ("<", numBoolBinop (<))

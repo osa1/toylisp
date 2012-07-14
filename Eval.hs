@@ -1,7 +1,5 @@
 {-# LANGUAGE GADTs, NamedFieldPuns #-}
-{-# OPTIONS_GHC -fwarn-incomplete-patterns
-                -fwarn-unused-binds
-                -fwarn-unused-matches #-}
+{-# OPTIONS_GHC -Wall -fno-warn-hi-shadowing -fno-warn-unused-do-bind #-}
 module Eval where
 
 import Control.Monad.Error (throwError)

@@ -1,5 +1,5 @@
 {-# LANGUAGE NoMonomorphismRestriction, GADTs, NamedFieldPuns #-}
-{-# OPTIONS_GHC -fno-warn-hi-shadowing #-}
+{-# OPTIONS_GHC -Wall -fno-warn-hi-shadowing -fno-warn-name-shadowing -fno-warn-unused-do-bind #-}
 
 module Types where
 

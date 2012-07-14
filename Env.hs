@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wall -fno-warn-hi-shadowing -fno-warn-unused-do-bind -fno-warn-name-shadowing #-}
 module Env where
 
 import Types
