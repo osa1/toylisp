@@ -1,4 +1,5 @@
-{-# OPTIONS_GHC -Wall -fno-warn-hi-shadowing -fno-warn-unused-do-bind -fno-warn-name-shadowing #-}
+{-# OPTIONS_GHC -Wall -fno-warn-missing-signatures -fno-warn-hi-shadowing -fno-warn-unused-do-bind -fno-warn-name-shadowing #-}
+{-# LANGUAGE GADTs #-}
 module Parser where
 
 import Control.Monad
@@ -103,13 +104,22 @@ parseLambda = do
 parseLambdaOrFun :: Parser (Either (Expr Symbol) (Expr Lambda))
 parseLambdaOrFun = liftM Right parseLambda <|> liftM Left parseSymbol
 
+-- TODO: this is wrong, too. Try this ((higher-order-fun some-other-fun) param1 param2)
+--parseApplication :: Parser (Expr Application)
+--parseApplication = do
+--    spChar '('
+--    fun <- parseLambdaOrFun
+--    params <- many parseAnyExpr
+--    spChar ')'
+--    return $ Application fun params
+
 parseApplication :: Parser (Expr Application)
 parseApplication = do
-    spChar '('
-    fun <- parseLambdaOrFun
-    params <- many parseAnyExpr
-    spChar ')'
-    return $ Application fun params
+  spChar '('
+  fun <- parseAnyExpr
+  params <- many parseAnyExpr
+  spChar ')'
+  return $ Application fun params
 
 parseIf :: Parser (Expr If)
 parseIf = do
@@ -136,6 +146,14 @@ parseDelimitedList o c = do
     spChar c
     return $ List lst
 
+parseList :: Parser (Expr List)
+parseList = do
+    spChar '('
+    spString "list"
+    lst <- many parseAnyExpr
+    spChar ')'
+    return $ List lst
+
 parseCallCC :: Parser (Expr CallCC)
 parseCallCC = do
     spChar '('
@@ -144,17 +162,41 @@ parseCallCC = do
     spChar ')'
     return $ CallCC fun
 
+-- FIXME: This syntax is erroneous. There is no way to distinguish a function definition
+-- and normal definition that calls another function in it's body.
+--parseDefine :: Parser (Expr Define)
+--parseDefine = do
+--  spChar '('
+--  spString "define"
+--  name <- parseSymbol
+--  params <- optionMaybe $ try parseArgList
+--  (case params of
+--     Nothing -> do def <- parseAnyExpr
+--                   return $ Define name def
+--     Just ps -> do def <- many1 parseAnyExpr
+--                   return $ Define name (AnyExpr $ Lambda ps def)) <* spChar ')'
+
+parseDef = try parseDefine <|> try parseDefun
+
 parseDefine :: Parser (Expr Define)
 parseDefine = do
   spChar '('
   spString "define"
   name <- parseSymbol
-  params <- optionMaybe $ try parseArgList
-  (case params of
-     Nothing -> do def <- parseAnyExpr
-                   return $ Define name def
-     Just ps -> do def <- many1 parseAnyExpr
-                   return $ Define name (AnyExpr $ Lambda ps def)) <* spChar ')'
+  def <- parseAnyExpr
+  spChar ')'
+  return $ Define name def
+
+parseDefun :: Parser (Expr Define)
+parseDefun = do
+  spChar '('
+  spString "defun"
+  name <- parseSymbol
+  params <- parseArgList
+  body <- many1 parseAnyExpr
+  spChar ')'
+  return $ Define name (AnyExpr $ Lambda params body)
+
 
 parseSet :: Parser (Expr Set)
 parseSet = do
@@ -188,6 +230,18 @@ parseAnyExpr :: Parser AnyExpr
 --                       , anyExpr $ try parseApplication
 --                       , anyExpr $ try (parseDelimitedList '(' ')')
 --                       ]
+
+consSymbol :: Expr List -> String -> Parser (Expr List)
+consSymbol (List lst) s = return $ List ((AnyExpr $ Symbol s) : lst)
+
+mapMacro :: Expr List -> Parser (Expr List)
+mapMacro = flip consSymbol "make-map"
+
+vectorMacro :: Expr List -> Parser (Expr List)
+vectorMacro = flip consSymbol "make-vector"
+
+--vectorMacro :: Expr List -> Expr List
+
 parseAnyExpr = do
     spaces
     choice  [ val $ try parseBool
@@ -199,10 +253,13 @@ parseAnyExpr = do
             , anyExpr $ try parseIf
             , anyExpr $ try parseEval
             , anyExpr $ try parseCallCC
-            , anyExpr $ try parseDefine
+            , anyExpr $ try parseDef
             , anyExpr $ try parseSet
+            , anyExpr $ try parseList
             , anyExpr $ try parseApplication
-            , anyExpr $ try (parseDelimitedList '(' ')')
+            --, anyExpr $ try (parseDelimitedList '(' ')')
+            , anyExpr $ try (parseDelimitedList '[' ']') >>= vectorMacro
+            , anyExpr $ try (parseDelimitedList '{' '}') >>= mapMacro
             ]
 
 readOrThrow :: Parser a -> String -> IOThrowsError a

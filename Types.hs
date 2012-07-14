@@ -12,7 +12,7 @@ import Data.IORef (IORef, newIORef)
 type Env = IORef [(String, IORef TVal)]
 
 nullEnv :: IO Env
-nullEnv = newIORef []
+nullEnv = newIORef Nil >>= \ref -> newIORef [("nil", ref)]
 
 data Symbol
 data Lambda
@@ -29,7 +29,8 @@ data Set
 data Expr a where
     Symbol :: String -> Expr Symbol
     Lambda :: [Expr Symbol] -> [AnyExpr] -> Expr Lambda
-    Application :: Either (Expr Symbol) (Expr Lambda) -> [AnyExpr] -> Expr Application
+    --Application :: Either (Expr Symbol) (Expr Lambda) -> [AnyExpr] -> Expr Application
+    Application :: AnyExpr -> [AnyExpr] -> Expr Application
     If :: AnyExpr -> AnyExpr -> AnyExpr -> Expr If
     Fexpr :: [Expr Symbol] -> [AnyExpr] -> Expr Fexpr
     Val :: TVal -> Expr Val
@@ -54,7 +55,7 @@ instance Show AnyExpr where
 
 data TType = CharType | StringType | SymbolType | IntType | FloatType | FunctionType
     | ListType | BoolType | ContinuationType | SyntaxType | NilType
-  deriving Show
+  deriving (Show, Eq)
 
 data TVal = Char Char
           | String String
@@ -72,6 +73,7 @@ data TVal = Char Char
           | Continuation Cont
           | Syntax AnyExpr
           | Nil
+  --deriving (Eq) -- I need some custom equality rules
 
 class Typed e where
     typeOf :: e -> TType
@@ -141,6 +143,8 @@ data Cont = EndCont
           | DefineCont String Env Cont
           -- Function application
           | ApplyCont [AnyExpr] [TVal] Env Cont
+          | SeqCont [AnyExpr] [TVal] Env Cont
+          | RemoveMeCont [AnyExpr] [TVal] TVal Env Cont
           | SeqLastCont [AnyExpr] Env Cont
 
 
@@ -149,8 +153,9 @@ data Cont = EndCont
 instance Show (Expr a) where
     show (Symbol str) = str
     show (Lambda params body) = "(lambda (" ++ unwords (map show params) ++ ") " ++ unwords (map show body) ++ ")"
-    show (Application (Left fun) params) = "(" ++ show fun ++ " " ++ unwords (map show params) ++ ")"
-    show (Application (Right lambda) params) = "(" ++ show lambda ++ " " ++ unwords (map show params) ++ ")"
+    --show (Application (Left fun) params) = "(" ++ show fun ++ " " ++ unwords (map show params) ++ ")"
+    --show (Application (Right lambda) params) = "(" ++ show lambda ++ " " ++ unwords (map show params) ++ ")"
+    show (Application f params) = "(" ++ show f ++ " " ++ unwords (map show params) ++ ")"
     show (If ifE thenE elseE) = "(" ++ intercalate "," [show ifE, show thenE, show elseE] ++ ")"
     show (Fexpr params body) = "(fexpr (" ++ unwords (map show params) ++ ") " ++ unwords (map show body) ++ ")"
     show (Val tval) = show tval

@@ -1,5 +1,5 @@
 {-# LANGUAGE GADTs, NamedFieldPuns #-}
-{-# OPTIONS_GHC -Wall -fno-warn-hi-shadowing -fno-warn-unused-do-bind #-}
+{-# OPTIONS_GHC -Wall -fno-warn-hi-shadowing -fno-warn-unused-do-bind -fno-warn-name-shadowing #-}
 module Eval where
 
 import Control.Monad.Error (throwError)
@@ -7,7 +7,7 @@ import Data.Maybe (isNothing)
 import Control.Monad.IO.Class (liftIO)
 
 import Types
-import Prim
+--import Prim
 import Env
 
 --evalForm :: TFexpr
@@ -23,10 +23,12 @@ eval env (Symbol s) cont = getVar env s >>= applyCont cont
 eval env (Lambda params body) cont = makeNormalFunc env params body >>= applyCont cont
 
 -- Function application
-eval env (Application (Left (Symbol fun)) params) cont =
-    getVar env fun >>= applyCont (ApplyCont params [] env cont)
-eval env (Application (Right lambda) params) cont =
-    eval env lambda (ApplyCont params [] env cont)
+eval env (Application (AnyExpr e) params) cont =
+    eval env e (ApplyCont params [] env cont)
+--eval env (Application (Left (Symbol fun)) params) cont =
+--    getVar env fun >>= applyCont (ApplyCont params [] env cont)
+--eval env (Application (Right lambda) params) cont =
+--    eval env lambda (ApplyCont params [] env cont)
 
 eval env (Define (Symbol name) body) cont = eval' env body (DefineCont name env cont)
 eval env (Set (Symbol name) body) cont = eval' env body (SetCont name env cont)
@@ -39,9 +41,13 @@ eval _ (Fexpr _ _) _ = do
     undefined
 
 eval _ (Val v) cont = applyCont cont v
-eval _ (List _) _ = do
-    liftIO $ putStrLn "Lists are not yet implemented."
-    undefined -- TODO: why did I add this?
+--eval _ (List _) _ = do
+--    liftIO $ putStrLn "Lists are not yet implemented."
+--    undefined -- TODO: why did I add this?
+
+eval _ (List []) cont = applyCont cont (TList [])
+eval env (List (x:xs)) cont =
+    eval' env x (SeqCont xs [] env cont)
 
 eval env (EvalExp form) cont = eval' env form cont
 
@@ -84,20 +90,24 @@ applyCont EndCont val = return val
 applyCont (PredCont _ elseE env cont) (Bool False) = eval' env elseE cont
 applyCont (PredCont thenE _ env cont) _ = eval' env thenE cont
 
+-- TODO: remove RemoveMe
 applyCont (ApplyCont (x:xs) args env cont) fun = do
-    r <- eval' env x EndCont
-    applyCont (ApplyCont xs (args++[r]) env cont) fun
--- TODO: be sure this works as expected
+    eval' env x (RemoveMeCont xs args fun env cont)
+    --r <- eval' env x EndCont
+    --applyCont (ApplyCont xs (args++[r]) env cont) fun
 applyCont (ApplyCont [] args _ cont) fun = apply fun args cont
+
+applyCont (SeqCont (x:xs) vals env cont) val =
+    eval' env x (SeqCont xs (vals ++ [val]) env cont)
+applyCont (SeqCont [] args _ cont) val = applyCont cont $ TList $ args ++ [val]
+
+applyCont (RemoveMeCont xs args fun env cont) val =
+    applyCont (ApplyCont xs (args ++ [val]) env cont) fun
+
 
 applyCont (DefineCont name env cont) val = defineVar env name val >>= applyCont cont
 applyCont (SetCont name env cont) val = setVar env name val >>= applyCont cont
 
--- FIXME: there are some errors in SeqLastCont
--- Try this:
-     --(define cont #f)
-     --(define test () ((lambda (i) (call/cc (lambda (k) (set! cont k))) (set! i (+ i 1)) i) 0))
-     --(cont)
 applyCont (SeqLastCont (x:xs) env cont) _ =
     eval' env x (SeqLastCont xs env cont)
 
