@@ -30,9 +30,10 @@ parseBool :: Parser TVal
 parseBool = do
   char '#'
   c <- char 't' <|> char 'f'
-  return $ case c of
-             't' -> Bool True
-             'f' -> Bool False
+  case c of
+    't' -> return $ Bool True
+    'f' -> return $ Bool False
+    _ -> unexpected [c]
 
 -- Numeric types ----------------------------------------
 
