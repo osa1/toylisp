@@ -9,12 +9,13 @@ import Control.Monad.Error (throwError)
 import IO
 import Parser (readAsSyntax)
 import Env
+import Eq ()
 
 primitives :: [(String, SimpleFunc)]
 primitives = [ ("first", first)
              , ("rest", rest)
              , ("cons", cons)
-             --, ("eqv?", eqv)
+             , ("eq", eq)
 
              , ("+", numericBinop (+))
              , ("-", numericBinop (-))
@@ -46,6 +47,8 @@ primitives = [ ("first", first)
              , ("boolean?", boolp)
              , ("symbol->string", symbolToString)
              -- , ("apply", applyProc)
+
+             , ("type-of", typeOfFun)
 
              ---- IO functions
              , ("println", println)
@@ -151,6 +154,14 @@ boolBoolBinop = boolBinop unpackBool
 --unpackStr :: LispVal -> IOThrowsError String
 --unpackStr (String s) = return s
 --unpackStr notString = throwError $ TypeMismatch "string" notString
+
+eq :: SimpleFunc
+eq params = if length params /= 2 then
+                throwError $ NumArgs 2 (length params)
+            else
+                eq' (params !! 0) (params !! 1)
+  where eq' :: TVal -> TVal -> IOThrowsError TVal
+        eq' p1 p2 = return $ Bool (p1 == p2)
 
 --eqv :: [LispVal] -> IOThrowsError LispVal
 --eqv vals = case eqv' vals of
