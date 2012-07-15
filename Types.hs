@@ -28,7 +28,6 @@ data Set
 data Expr a where
     Symbol :: String -> Expr Symbol
     Lambda :: [Expr Symbol] -> [AnyExpr] -> Expr Lambda
-    --Application :: Either (Expr Symbol) (Expr Lambda) -> [AnyExpr] -> Expr Application
     Application :: AnyExpr -> [AnyExpr] -> Expr Application
     If :: AnyExpr -> AnyExpr -> AnyExpr -> Expr If
     Fexpr :: [Expr Symbol] -> [AnyExpr] -> Expr Fexpr
@@ -108,6 +107,7 @@ data TError = NumArgs Int Int
             | BadSpecialForm String AnyExpr
             | NotFunc String String
             | UnboundVar String String
+            | SyntaxError
             | Default String
 
 instance Error TError where
@@ -189,6 +189,7 @@ instance Show TError where
     show (TypeMismatch expected found) = "Invalid type: expected " ++ show expected ++
                                          ", found " ++ show found
     show (Parser parseErr) = "Parse error at " ++ show parseErr
+    show SyntaxError = "Syntax error"
 
 
 instance Show TVal where

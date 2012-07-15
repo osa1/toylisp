@@ -12,6 +12,7 @@ import Parser (readAsSyntax)
 import Env
 import Eval (eval)
 import Eq ()
+import Syntax
 
 primitives :: [(String, PrimFunc)]
 primitives = [ ("first", first)
@@ -66,6 +67,7 @@ primitives = [ ("first", first)
              -- read
              , ("read", readForm)
 
+             , ("make-application", makeApplicationSyntax)
              -- eval
              --("eval", evalForm)
              ]
@@ -231,24 +233,25 @@ readForm [x] = throwError $ TypeMismatch StringType (typeOf x)
 readForm args = throwError $ NumArgs 1 (length args)
 
 evalProc :: PrimFexpr
-evalProc (Env env) [(Syntax (AnyExpr expr))] cont = do
-    eval env expr (EvalCont env cont)
-evalProc _ _ _ = throwError $ Default "not implemented"
+evalProc (Env env) [(Syntax (AnyExpr expr))] cont = eval env expr (EvalCont env cont)
+evalProc _ _ _ = throwError $ Default "error on eval"
 
-makeApplication :: [TVal] -> TVal
-makeApplication [Syntax fun, Syntax (AnyExpr (List args))] = Syntax $ AnyExpr (Application fun args)
+makeApplicationSyntax :: [TVal] -> IOThrowsError TVal
+makeApplicationSyntax [Syntax fun, Syntax (AnyExpr (List args))] =
+    fmap Syntax (makeApplication (fun:args))
+makeApplicationSyntax _ = throwError $ SyntaxError
 
+
+unpackSyntax :: [TVal] -> [AnyExpr]
+unpackSyntax = map (\(Syntax expr) -> expr)
+
+-- TODO: implemet this as user-defined fexpr
 applyProc :: PrimFexpr
-applyProc = undefined
---applyProc env [fun,(AnyExpr (List params))] cont = do
---    liftIO $ putStrLn "case1"
---    eval' env fun (ApplyCont params [] env cont)
---applyProc env (fun:params) cont = do
---    liftIO $ putStrLn $ "case2 " ++ show params
---    eval' env fun (ApplyCont params [] env cont)
---applyProc _ params _ = do
---    liftIO $ putStrLn "error case"
---    throwError $ NumArgs 1 (length params)
+applyProc env [(Syntax expr), (Syntax (AnyExpr (List params)))] cont =
+    evalProc env [(Syntax $ AnyExpr (Application expr params))] cont
+applyProc env (Syntax expr : params) cont =
+    evalProc env [(Syntax $ AnyExpr (Application expr (unpackSyntax params)))] cont
+applyProc _ _ _ = throwError $ SyntaxError
 
 -- $(deff apply (params)
 --    (eval (make-application (first params) (rest params))))

@@ -82,8 +82,9 @@ applyCont (PredCont _ elseE env cont) (Bool False) = eval' env elseE cont
 applyCont (PredCont thenE _ env cont) _ = eval' env thenE cont
 
 -- TODO: remove RemoveMe
-applyCont _ TFexpr{} = throwError $ Default "continuation application on Fexprs is not yet implemented"
---applyCont (ApplyCont args _ env cont) fexpr@TFexpr{} = do
+applyCont ApplyCont{} TFexpr{} = throwError $ Default "continuation application on Fexprs is not yet implemented"
+applyCont (ApplyCont args _ env cont) (PrimFexpr fexpr) =
+    fexpr (Env env) (map Syntax args) cont
 --    liftIO $ putStrLn "fexpr application"
 --    fexpr (Env env) (map Syntax args) cont
 applyCont (ApplyCont (x:xs) args env cont) fun = do
