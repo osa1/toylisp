@@ -33,9 +33,6 @@ eval env (If pred thenE elseE) cont = eval' env pred (PredCont thenE elseE env c
 
 -- TODO: fexprs
 eval _ (Fexpr params body) cont = makeFexpr params body >>= applyCont cont
---eval _ (Fexpr _ _ _) _ = do
---    liftIO $ putStrLn "Fexprs are not yet implemented."
---    undefined
 
 eval _ (Val v) cont = applyCont cont v
 
@@ -73,6 +70,9 @@ apply (Func params varargs body closure) args cont =
 apply (Continuation c) [param] _ = applyCont c param
 apply (Continuation c) [] _ = applyCont c Nil
 
+apply PrimFexpr{} _ _ = throwError $ Default "fexpr application is not yet implemented."
+apply TFexpr{} _ _ = throwError $ Default "fexpr application is not yet implemented."
+
 apply wtf _ _ = throwError $ TypeMismatch FunctionType (typeOf wtf)
 
 
@@ -82,9 +82,7 @@ applyCont (PredCont _ elseE env cont) (Bool False) = eval' env elseE cont
 applyCont (PredCont thenE _ env cont) _ = eval' env thenE cont
 
 -- TODO: remove RemoveMe
-applyCont _ TFexpr{} = do
-    liftIO $ putStrLn "continuation application on Fexprs is not yet implemented"
-    undefined
+applyCont _ TFexpr{} = throwError $ Default "continuation application on Fexprs is not yet implemented"
 --applyCont (ApplyCont args _ env cont) fexpr@TFexpr{} = do
 --    liftIO $ putStrLn "fexpr application"
 --    fexpr (Env env) (map Syntax args) cont
