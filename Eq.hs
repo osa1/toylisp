@@ -22,10 +22,9 @@ instance Eq (Expr a) where
     Lambda p1 b1 == Lambda p2 b2 = p1 == p2 && b1 == b2
     Application f1 b1 == Application f2 b2 = f1 == f2 && b1 == b2
     If i1 t1 e1 == If i2 t2 e2 = i1 == i2 && t1 == t2 && e1 == e2
-    Fexpr p1 b1 == Fexpr p2 b2 = p1 == p2 && b1 == b2
+    Fexpr n1 p1 == Fexpr n2 p2 = n1 == n2 && p1 == p2
     Val v1 == Val v2 = v1 == v2
     List e1 == List e2 = e1 == e2
-    EvalExp e1 == EvalExp e2 = e1 == e2
     CallCC c1 == CallCC c2 = c1 == c2
 
     _ == _ = False
@@ -37,7 +36,6 @@ instance Eq AnyExpr where
     AnyExpr if1@If{} == AnyExpr if2@If{} = if1 == if2
     AnyExpr f1@Fexpr{} == AnyExpr f2@Fexpr{} = f1 == f2
     AnyExpr v1@Val{} == AnyExpr v2@Val{} = v1 == v2
-    AnyExpr e1@EvalExp{} == AnyExpr e2@EvalExp{} = e1 == e2
     AnyExpr c1@CallCC{} == AnyExpr c2@CallCC{} = c1 == c2
 
     _ == _ = False

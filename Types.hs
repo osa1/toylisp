@@ -21,7 +21,6 @@ data If
 data Fexpr
 data Val
 data List
-data EvalExp
 data CallCC
 data Define
 data Set
@@ -32,19 +31,19 @@ data Expr a where
     --Application :: Either (Expr Symbol) (Expr Lambda) -> [AnyExpr] -> Expr Application
     Application :: AnyExpr -> [AnyExpr] -> Expr Application
     If :: AnyExpr -> AnyExpr -> AnyExpr -> Expr If
-    Fexpr :: [Expr Symbol] -> [TVal] -> Expr Fexpr
+    Fexpr :: [Expr Symbol] -> [AnyExpr] -> Expr Fexpr
     Val :: TVal -> Expr Val
     List :: [AnyExpr] -> Expr List
 
     -- Special forms
-    EvalExp :: AnyExpr -> Expr EvalExp
     CallCC :: Either (Expr Symbol) (Expr Lambda) -> Expr CallCC
 
     Define :: Expr Symbol -> AnyExpr -> Expr Define
     Set :: Expr Symbol -> AnyExpr -> Expr Set
 
-type SimpleFunc = [TVal] -> IOThrowsError TVal
-type TFexpr = Env -> [AnyExpr] -> Cont -> IOThrowsError TVal
+type PrimFunc = [TVal] -> IOThrowsError TVal
+type TFexpr = TVal -> [TVal] -> Cont -> IOThrowsError TVal
+type PrimFexpr = TVal -> [TVal] -> Cont -> IOThrowsError TVal
 type TMacro = Expr List -> Expr List
 
 data AnyExpr where
@@ -54,7 +53,7 @@ instance Show AnyExpr where
     show (AnyExpr a) = show a
 
 data TType = CharType | StringType | SymbolType | IntType | FloatType | FunctionType
-    | ListType | BoolType | ContinuationType | SyntaxType | FexprType | NilType
+    | ListType | BoolType | ContinuationType | SyntaxType | FexprType | EnvType | NilType
   deriving (Show, Eq)
 
 data TVal = Char Char
@@ -67,12 +66,16 @@ data TVal = Char Char
                  , body :: [AnyExpr]
                  , closure :: Env
                  }
-          | SimpleFunc SimpleFunc
-          | TFexpr TFexpr
+          | PrimFunc PrimFunc
+          | PrimFexpr PrimFexpr
+          | TFexpr { fexprParams :: [Expr Symbol]
+                   , fexprBody :: [AnyExpr]
+                   }
           | TList [TVal]
           | Bool Bool
           | Continuation Cont
           | Syntax AnyExpr
+          | Env Env
           | Nil
   --deriving (Eq) -- I need some custom equality rules
 
@@ -86,12 +89,14 @@ instance Typed TVal where
     typeOf Int{} = IntType
     typeOf Float{} = FloatType
     typeOf Func{} = FunctionType
-    typeOf SimpleFunc{} = FunctionType
+    typeOf PrimFunc{} = FunctionType
+    typeOf PrimFexpr{} = FexprType
     typeOf TFexpr{} = FexprType
     typeOf TList{} = ListType
     typeOf Bool{} = BoolType
     typeOf Continuation{} = ContinuationType
     typeOf Syntax{} = SyntaxType
+    typeOf Env{} = EnvType
     typeOf Nil{} = NilType
 
 
@@ -135,6 +140,10 @@ makeNormalFunc = makeFunc Nothing
 makeVarargs :: Expr Symbol -> Env -> [Expr Symbol] -> [AnyExpr] -> IOThrowsError TVal
 makeVarargs = makeFunc . Just
 
+-- Fexpr constructor
+makeFexpr :: [Expr Symbol] -> [AnyExpr] -> IOThrowsError TVal
+makeFexpr params body = return $ TFexpr params body
+
 -- Continuations
 
 data Cont = EndCont
@@ -147,6 +156,7 @@ data Cont = EndCont
           | SeqCont [AnyExpr] [TVal] Env Cont
           | RemoveMeCont [AnyExpr] [TVal] TVal Env Cont
           | SeqLastCont [AnyExpr] Env Cont
+          | EvalCont Env Cont
 
 
 -- Show instances ------------------------------------------------------------------
@@ -162,7 +172,6 @@ instance Show (Expr a) where
     show (Val tval) = show tval
     show (List exprs) = "(" ++ unwords (map show exprs) ++ ")"
 
-    show (EvalExp expr) = "(eval " ++ show expr ++ ")"
     show (CallCC (Left fun)) = show "(call/cc " ++ show fun ++ ")"
     show (CallCC (Right lambda)) = show "(call/cc " ++ show lambda ++ ")"
 
@@ -189,10 +198,12 @@ instance Show TVal where
     show (Int i) = show i
     show (Float f) = show f
     show Func{} = "<Function>"
-    show SimpleFunc{} = "<Function>"
+    show PrimFunc{} = "<Function>"
+    show PrimFexpr{} = "<Fexpr>"
     show TFexpr{} = "<Fexpr>"
     show (TList l) = show l
     show (Bool b) = show b
     show Continuation{} = "<Continuation>"
     show Syntax{} = "<Syntax>"
+    show Env{} = "<Env>"
     show Nil = "Nil"

@@ -6,7 +6,7 @@ import System.Environment (getArgs)
 
 import System.IO
 import Eval
-import Env
+--import Env
 import Types
 import Parser
 import Prim

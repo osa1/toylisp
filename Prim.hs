@@ -10,10 +10,10 @@ import Control.Monad.Error (throwError)
 import IO
 import Parser (readAsSyntax)
 import Env
-import Eval (eval')
+import Eval (eval)
 import Eq ()
 
-primitives :: [(String, SimpleFunc)]
+primitives :: [(String, PrimFunc)]
 primitives = [ ("first", first)
              , ("rest", rest)
              , ("cons", cons)
@@ -70,8 +70,10 @@ primitives = [ ("first", first)
              --("eval", evalForm)
              ]
 
-fexprs :: [(String, TFexpr)]
-fexprs = [ ("apply", applyProc) ]
+fexprs :: [(String, PrimFexpr)]
+fexprs = [ ("apply", applyProc)
+         , ("eval", evalProc)
+         ]
 
 
 errorOrFalse :: Int -> [TVal] -> IOThrowsError TVal
@@ -81,47 +83,47 @@ errorOrFalse n vals = if length vals /= n then
                           return $ Bool False
 
 -- is there a way to generate this repetitive code?
-first :: SimpleFunc
+first :: PrimFunc
 first [TList lst] = return $ head lst
 first [notList] = throwError $ TypeMismatch ListType (typeOf notList)
 first args = throwError $ NumArgs 1 (length args)
 
-rest :: SimpleFunc
+rest :: PrimFunc
 rest [TList lst] = return $ TList (tail lst)
 rest [notList] = throwError $ TypeMismatch ListType (typeOf notList)
 rest args = throwError $ NumArgs 1 (length args)
 
-cons :: SimpleFunc
+cons :: PrimFunc
 cons [v, TList lst] = return $ TList (v : lst)
 cons [_, notLst] = throwError $ TypeMismatch ListType (typeOf notLst)
 cons args = throwError $ NumArgs 2 (length args)
 
-stringp :: SimpleFunc
+stringp :: PrimFunc
 stringp [String _] = return $ Bool True
 stringp args = errorOrFalse 1 args
 
-symbolp :: SimpleFunc
+symbolp :: PrimFunc
 symbolp [TSymbol _] = return $ Bool True
 symbolp args = errorOrFalse 1 args
 
-numberp :: SimpleFunc
+numberp :: PrimFunc
 numberp [Int _] = return $ Bool True
 numberp [Float _] = return $ Bool True
 numberp args = errorOrFalse 1 args
 
-listp :: SimpleFunc
+listp :: PrimFunc
 listp [TList _] = return $ Bool True
 listp args = errorOrFalse 1 args
 
-boolp :: SimpleFunc
+boolp :: PrimFunc
 boolp [Bool _] = return $ Bool True
 boolp args = errorOrFalse 1 args
 
-typeOfFun :: SimpleFunc
+typeOfFun :: PrimFunc
 typeOfFun [val] = return $ TSymbol (show $ typeOf val)
 typeOfFun args = throwError $ NumArgs 1 (length args)
 
-symbolToString :: SimpleFunc
+symbolToString :: PrimFunc
 symbolToString [TSymbol s] = return $ String s
 symbolToString [notSymbol] = throwError $ TypeMismatch SymbolType (typeOf notSymbol)
 symbolToString args = throwError $ NumArgs 1 (length args)
@@ -160,7 +162,7 @@ boolBoolBinop = boolBinop unpackBool
 --unpackStr (String s) = return s
 --unpackStr notString = throwError $ TypeMismatch "string" notString
 
-eq :: SimpleFunc
+eq :: PrimFunc
 eq params = if length params /= 2 then
                 throwError $ NumArgs 2 (length params)
             else
@@ -228,14 +230,32 @@ readForm [String form] = readAsSyntax form
 readForm [x] = throwError $ TypeMismatch StringType (typeOf x)
 readForm args = throwError $ NumArgs 1 (length args)
 
-applyProc :: TFexpr
-applyProc env [fun,(AnyExpr (List params))] cont = eval' env fun (ApplyCont params [] env cont)
-applyProc env (fun:params) cont = eval' env fun (ApplyCont params [] env cont)
-applyProc _ params _ = throwError $ NumArgs 1 (length params)
+evalProc :: PrimFexpr
+evalProc (Env env) [(Syntax (AnyExpr expr))] cont = do
+    eval env expr (EvalCont env cont)
+evalProc _ _ _ = throwError $ Default "not implemented"
+
+makeApplication :: [TVal] -> TVal
+makeApplication [Syntax fun, Syntax (AnyExpr (List args))] = Syntax $ AnyExpr (Application fun args)
+
+applyProc :: PrimFexpr
+applyProc = undefined
+--applyProc env [fun,(AnyExpr (List params))] cont = do
+--    liftIO $ putStrLn "case1"
+--    eval' env fun (ApplyCont params [] env cont)
+--applyProc env (fun:params) cont = do
+--    liftIO $ putStrLn $ "case2 " ++ show params
+--    eval' env fun (ApplyCont params [] env cont)
+--applyProc _ params _ = do
+--    liftIO $ putStrLn "error case"
+--    throwError $ NumArgs 1 (length params)
+
+-- $(deff apply (params)
+--    (eval (make-application (first params) (rest params))))
 
 primitiveBindings :: IO Env
 primitiveBindings =
     let makeFunc constructor (var, func) = (var, constructor func)
-        addPrimitives = flip bindVars $ map (makeFunc SimpleFunc) primitives
-        addFexprs = flip bindVars $ map (makeFunc TFexpr) fexprs
+        addPrimitives = flip bindVars $ map (makeFunc PrimFunc) primitives
+        addFexprs = flip bindVars $ map (makeFunc PrimFexpr) fexprs
     in nullEnv >>= addPrimitives >>= addFexprs

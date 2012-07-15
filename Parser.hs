@@ -131,14 +131,6 @@ parseIf = do
     spChar ')'
     return $ If pred ifE thenE
 
-parseEval :: Parser (Expr EvalExp)
-parseEval = do
-    spChar '('
-    spString "eval"
-    expr <- parseAnyExpr
-    spChar ')'
-    return $ EvalExp expr
-
 parseDelimitedList :: Char -> Char -> Parser (Expr List)
 parseDelimitedList o c = do
     spChar o
@@ -162,19 +154,24 @@ parseCallCC = do
     spChar ')'
     return $ CallCC fun
 
--- FIXME: This syntax is erroneous. There is no way to distinguish a function definition
--- and normal definition that calls another function in it's body.
---parseDefine :: Parser (Expr Define)
---parseDefine = do
---  spChar '('
---  spString "define"
---  name <- parseSymbol
---  params <- optionMaybe $ try parseArgList
---  (case params of
---     Nothing -> do def <- parseAnyExpr
---                   return $ Define name def
---     Just ps -> do def <- many1 parseAnyExpr
---                   return $ Define name (AnyExpr $ Lambda ps def)) <* spChar ')'
+parseFexprDefine :: Parser (Expr Define)
+parseFexprDefine = do
+  spString "$("
+  spString "deff"
+  name <- parseSymbol
+  params <- parseArgList
+  body <- many1 parseAnyExpr
+  spChar ')'
+  return $ Define name (AnyExpr $ Fexpr params body)
+
+parseFexpr :: Parser (Expr Fexpr)
+parseFexpr = do
+  spString "$("
+  spString "deff"
+  params <- parseArgList
+  body <- many1 parseAnyExpr
+  spChar ')'
+  return $ Fexpr params body
 
 parseDef = try parseDefine <|> try parseDefun
 
@@ -213,23 +210,6 @@ val a = anyExpr $ liftM Val a
 parseDispatch :: Parser (Expr List)
 parseDispatch = undefined
 
-parseAnyExpr :: Parser AnyExpr
---parseAnyExpr = do
---    spaces
---    (char '#' >> anyExpr parseDispatch)
---           <|> choice  [ val $ try parseBool
---                       , val $ try parseNumber
---                       , val $ try parseString
---                       , anyExpr $ try parseSymbol
---                       , anyExpr $ try parseLambda
---                       , anyExpr $ try parseIf
---                       , anyExpr $ try parseEval
---                       , anyExpr $ try parseCallCC
---                       , anyExpr $ try parseDefine
---                       , anyExpr $ try parseSet
---                       , anyExpr $ try parseApplication
---                       , anyExpr $ try (parseDelimitedList '(' ')')
---                       ]
 
 consSymbol :: Expr List -> String -> Parser (Expr List)
 consSymbol (List lst) s = return $ List ((AnyExpr $ Symbol s) : lst)
@@ -240,18 +220,18 @@ mapMacro = flip consSymbol "make-map"
 vectorMacro :: Expr List -> Parser (Expr List)
 vectorMacro = flip consSymbol "make-vector"
 
---vectorMacro :: Expr List -> Expr List
-
+parseAnyExpr :: Parser AnyExpr
 parseAnyExpr = do
     spaces
     choice  [ val $ try parseBool
             , val $ try parseChar
             , val $ try parseNumber
             , val $ try parseString
+            , anyExpr $ try parseFexprDefine
+            , anyExpr $ try parseFexpr
             , anyExpr $ try parseSymbol
             , anyExpr $ try parseLambda
             , anyExpr $ try parseIf
-            , anyExpr $ try parseEval
             , anyExpr $ try parseCallCC
             , anyExpr $ try parseDef
             , anyExpr $ try parseSet

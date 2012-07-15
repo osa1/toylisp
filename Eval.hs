@@ -19,16 +19,10 @@ eval' :: Env -> AnyExpr -> Cont -> IOThrowsError TVal
 eval' env (AnyExpr expr) = eval env expr
 
 eval :: Env -> Expr a -> Cont -> IOThrowsError TVal
-eval env (Symbol s) cont = do
-    liftIO $ putStrLn ("getVar " ++ show s)
-    getVar env s >>= applyCont cont
---eval env (Symbol s) cont = getVar env s >>= applyCont cont
+eval env (Symbol s) cont = getVar env s >>= applyCont cont
 eval env (Lambda params body) cont = makeNormalFunc env params body >>= applyCont cont
 
 -- Function application
--- TODO: Implement apply function as Fexpr
---eval env (Application (AnyExpr (Symbol "apply")) [AnyExpr fun,AnyExpr (List params)]) cont =
---    eval env fun (ApplyCont params [] env cont)
 eval env (Application (AnyExpr e) params) cont =
     eval env e (ApplyCont params [] env cont)
 
@@ -38,9 +32,10 @@ eval env (Set (Symbol name) body) cont = eval' env body (SetCont name env cont)
 eval env (If pred thenE elseE) cont = eval' env pred (PredCont thenE elseE env cont)
 
 -- TODO: fexprs
-eval _ (Fexpr _ _) _ = do
-    liftIO $ putStrLn "Fexprs are not yet implemented."
-    undefined
+eval _ (Fexpr params body) cont = makeFexpr params body >>= applyCont cont
+--eval _ (Fexpr _ _ _) _ = do
+--    liftIO $ putStrLn "Fexprs are not yet implemented."
+--    undefined
 
 eval _ (Val v) cont = applyCont cont v
 
@@ -48,15 +43,13 @@ eval _ (List []) cont = applyCont cont (TList [])
 eval env (List (x:xs)) cont =
     eval' env x (SeqCont xs [] env cont)
 
-eval env (EvalExp form) cont = eval' env form cont
-
 eval env (CallCC (Left (Symbol fun))) cont =
     getVar env fun >>= applyCont (ApplyCont [] [Continuation cont] env cont)
 eval env (CallCC (Right lambda)) cont =
     eval env lambda (ApplyCont [] [Continuation cont] env cont)
 
 apply :: TVal -> [TVal] -> Cont -> IOThrowsError TVal
-apply (SimpleFunc fun) args cont = fun args >>= applyCont cont
+apply (PrimFunc fun) args cont = fun args >>= applyCont cont
 
 apply (Func params varargs body closure) args cont =
     if num params /= num args && isNothing varargs
@@ -77,11 +70,6 @@ apply (Func params varargs body closure) args cont =
         evalBody :: Env -> IOThrowsError TVal
         evalBody env = applyCont (SeqLastCont body env cont) Nil
 
--- For debugging purposes
-apply (TFexpr _) _ _ = do
-    liftIO $ putStrLn "error: call apply on fexpr"
-    undefined
-
 apply (Continuation c) [param] _ = applyCont c param
 apply (Continuation c) [] _ = applyCont c Nil
 
@@ -94,8 +82,12 @@ applyCont (PredCont _ elseE env cont) (Bool False) = eval' env elseE cont
 applyCont (PredCont thenE _ env cont) _ = eval' env thenE cont
 
 -- TODO: remove RemoveMe
-applyCont (ApplyCont args _ env cont) (TFexpr fexpr) = do
-    fexpr env args cont
+applyCont _ TFexpr{} = do
+    liftIO $ putStrLn "continuation application on Fexprs is not yet implemented"
+    undefined
+--applyCont (ApplyCont args _ env cont) fexpr@TFexpr{} = do
+--    liftIO $ putStrLn "fexpr application"
+--    fexpr (Env env) (map Syntax args) cont
 applyCont (ApplyCont (x:xs) args env cont) fun = do
     eval' env x (RemoveMeCont xs args fun env cont)
 applyCont (ApplyCont [] args _ cont) fun = apply fun args cont
@@ -115,3 +107,6 @@ applyCont (SeqLastCont (x:xs) env cont) _ =
     eval' env x (SeqLastCont xs env cont)
 
 applyCont (SeqLastCont [] _ cont) v = applyCont cont v
+
+applyCont (EvalCont env cont) (Syntax s) = eval' env s cont
+applyCont (EvalCont _ cont) val = applyCont cont val

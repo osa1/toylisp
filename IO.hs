@@ -8,6 +8,6 @@ import Types
 import Data.List (intercalate)
 import Control.Monad.IO.Class (liftIO)
 
-println :: SimpleFunc
+println :: PrimFunc
 println args = liftIO (putStrLn $ intercalate "    " (map show args)) >> return Nil
 
