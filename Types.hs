@@ -140,7 +140,7 @@ makeNormalFunc = makeFunc Nothing
 makeVarargs :: Expr Symbol -> Env -> [Expr Symbol] -> [AnyExpr] -> IOThrowsError TVal
 makeVarargs = makeFunc . Just
 
--- Fexpr constructor
+-- Fexpr constructro
 makeFexpr :: [Expr Symbol] -> [AnyExpr] -> IOThrowsError TVal
 makeFexpr params body = return $ TFexpr params body
 

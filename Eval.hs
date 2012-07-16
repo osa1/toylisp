@@ -49,15 +49,12 @@ apply :: TVal -> [TVal] -> Cont -> IOThrowsError TVal
 apply (PrimFunc fun) args cont = fun args >>= applyCont cont
 
 apply (Func params varargs body closure) args cont =
-    if num params /= num args && isNothing varargs
+    if length params /= length args && isNothing varargs
         then throwError $ NumArgs (length params) (length args)
         else liftIO (bindVars closure $ zip (map (\(Symbol s) -> s) params) args) >>=
             bindVarArgs varargs >>= evalBody
   where remainingArgs :: [TVal]
         remainingArgs = drop (length params) args
-
-        num :: [a] -> Integer
-        num = toInteger . length
 
         bindVarArgs :: Maybe (Expr Symbol) -> Env -> IOThrowsError Env
         bindVarArgs args env = case args of
@@ -75,6 +72,17 @@ apply TFexpr{} _ _ = throwError $ Default "fexpr application is not yet implemen
 
 apply wtf _ _ = throwError $ TypeMismatch FunctionType (typeOf wtf)
 
+applyFexpr :: TVal -> [TVal] -> Env -> Cont -> IOThrowsError TVal
+applyFexpr (TFexpr params body) args env cont =
+    if length params /= length args then
+        throwError $ NumArgs (length params) (length args)
+    else
+        liftIO (bindVars env $ zip (map (\(Symbol s) -> s) params) args) >>= evalBody
+  where evalBody :: Env -> IOThrowsError TVal
+        evalBody env = applyCont (SeqLastCont body env cont) Nil
+
+applyFexpr notTFexpr _ _ _ = throwError $ TypeMismatch FexprType (typeOf notTFexpr)
+
 
 applyCont :: Cont -> TVal -> IOThrowsError TVal
 applyCont EndCont val = return val
@@ -82,7 +90,10 @@ applyCont (PredCont _ elseE env cont) (Bool False) = eval' env elseE cont
 applyCont (PredCont thenE _ env cont) _ = eval' env thenE cont
 
 -- TODO: remove RemoveMe
-applyCont ApplyCont{} TFexpr{} = throwError $ Default "continuation application on Fexprs is not yet implemented"
+--applyCont ApplyCont{} TFexpr{} = throwError $ Default "continuation application on Fexprs is not yet implemented"
+applyCont (ApplyCont args _ env cont) fexpr@TFexpr{} =
+    applyFexpr fexpr (map Syntax args) env cont
+--applyCont ApplyCont{} fexpr@TFexpr{} = applyFexpr
 applyCont (ApplyCont args _ env cont) (PrimFexpr fexpr) =
     fexpr (Env env) (map Syntax args) cont
 --    liftIO $ putStrLn "fexpr application"
