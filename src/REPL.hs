@@ -51,8 +51,8 @@ completeFun s = return $ map simpleCompletion (prims ++ specials)
 wordComplete :: Monad m => CompletionFunc m
 wordComplete = completeWord Nothing " \t()\"\'#%" completeFun
 
-main :: IO ()
-main = do
+runREPL :: IO ()
+runREPL = do
     args <- getArgs
     env <- primitiveBindings
     if null args then

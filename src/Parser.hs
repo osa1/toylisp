@@ -204,6 +204,14 @@ parseSet = do
   spChar ')'
   return $ Set name def
 
+parseQList :: Parser (Expr List)
+parseQList = do
+  spString "'("
+  lst <- many parseAnyExpr
+  spChar ')'
+  return $ List lst
+
+
 anyExpr = liftM AnyExpr
 val a = anyExpr $ liftM Val a
 
@@ -238,6 +246,7 @@ parseAnyExpr = do
             , anyExpr $ try parseList
             , anyExpr $ try parseApplication
             --, anyExpr $ try (parseDelimitedList '(' ')')
+            , anyExpr $ try parseQList
             , anyExpr $ try (parseDelimitedList '[' ']') >>= vectorMacro
             , anyExpr $ try (parseDelimitedList '{' '}') >>= mapMacro
             ]
