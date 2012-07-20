@@ -10,11 +10,6 @@ import Types
 --import Prim
 import Env
 
---evalForm :: TFexpr
---evalForm env [form] cont =
---    eval' env form cont
---evalForm _ args _ = throwError $ NumArgs 1 (length args)
-
 eval' :: Env -> AnyExpr -> Cont -> IOThrowsError TVal
 eval' env (AnyExpr expr) = eval env expr
 
@@ -67,13 +62,8 @@ apply _ (Func params varargs body closure) args cont =
 apply env (Continuation c) [param] _ = applyCont c env param
 apply env (Continuation c) [] _ = applyCont c env Nil
 
-apply _ PrimFexpr{} _ _ = throwError $ Default "fexpr application is not yet implemented."
-apply _ TFexpr{} _ _ = throwError $ Default "fexpr application is not yet implemented."
-
-apply _ wtf _ _ = throwError $ TypeMismatch FunctionType (typeOf wtf)
-
-applyFexpr :: TVal -> [TVal] -> Env -> Cont -> IOThrowsError TVal
-applyFexpr (TFexpr params body) args env cont =
+apply env (PrimFexpr f) params cont = f (Env env) params cont
+apply env (TFexpr params body) args cont =
     if length params /= length args then
         throwError $ NumArgs (length params) (length args)
     else
@@ -81,7 +71,7 @@ applyFexpr (TFexpr params body) args env cont =
   where evalBody :: Env -> IOThrowsError TVal
         evalBody env = applyCont (SeqLastCont body cont) env Nil
 
-applyFexpr notTFexpr _ _ _ = throwError $ TypeMismatch FexprType (typeOf notTFexpr)
+apply _ wtf _ _ = throwError $ TypeMismatch FunctionType (typeOf wtf)
 
 
 applyCont :: Cont -> Env -> TVal -> IOThrowsError TVal
@@ -89,15 +79,11 @@ applyCont EndCont _ val = return val
 applyCont (PredCont _ elseE cont) env (Bool False) = eval' env elseE cont
 applyCont (PredCont thenE _ cont) env _ = eval' env thenE cont
 
--- TODO: remove RemoveMe
---applyCont ApplyCont{} TFexpr{} = throwError $ Default "continuation application on Fexprs is not yet implemented"
 applyCont (ApplyCont args _ cont) env fexpr@TFexpr{} =
-    applyFexpr fexpr (map Syntax args) env cont
---applyCont ApplyCont{} fexpr@TFexpr{} = applyFexpr
-applyCont (ApplyCont args _ cont) env (PrimFexpr fexpr) =
-    fexpr (Env env) (map Syntax args) cont
---    liftIO $ putStrLn "fexpr application"
---    fexpr (Env env) (map Syntax args) cont
+    apply env fexpr (map Syntax args) cont
+applyCont (ApplyCont args _ cont) env fexpr@PrimFexpr{} =
+    apply env fexpr (map Syntax args) cont
+
 applyCont (ApplyCont (x:xs) args cont) env fun = do
     eval' env x (RemoveMeCont xs args fun cont)
 applyCont (ApplyCont [] args cont) env fun = apply env fun args cont
