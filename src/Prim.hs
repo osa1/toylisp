@@ -253,9 +253,6 @@ applyProc env (Syntax expr : params) cont =
     evalProc env [(Syntax $ AnyExpr (Application expr (unpackSyntax params)))] cont
 applyProc _ _ _ = throwError $ SyntaxError
 
--- $(deff apply (params)
---    (eval (make-application (first params) (rest params))))
-
 primitiveBindings :: IO Env
 primitiveBindings =
     let makeFunc constructor (var, func) = (var, constructor func)
