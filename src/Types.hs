@@ -147,16 +147,16 @@ makeFexpr params body = return $ TFexpr params body
 -- Continuations
 
 data Cont = EndCont
-          | PredCont AnyExpr AnyExpr Cont
+          | PredCont AnyExpr AnyExpr Env Cont
           -- | TestCont AnyExpr AnyExpr Env Cont
-          | SetCont String Cont
-          | DefineCont String Cont
+          | SetCont String Env Cont
+          | DefineCont String Env Cont
           -- Function application
-          | ApplyCont [AnyExpr] [TVal] Cont
-          | SeqCont [AnyExpr] [TVal] Cont
-          | RemoveMeCont [AnyExpr] [TVal] TVal Cont
-          | SeqLastCont [AnyExpr] Cont
-          | EvalCont Cont
+          | ApplyCont [AnyExpr] [TVal] Env Cont
+          | SeqCont [AnyExpr] [TVal] Env Cont
+          | RemoveMeCont [AnyExpr] [TVal] TVal Env Cont
+          | SeqLastCont [AnyExpr] Env Cont
+          | EvalCont Env Cont
 
 
 -- Show instances ------------------------------------------------------------------

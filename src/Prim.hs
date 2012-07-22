@@ -233,7 +233,7 @@ readForm [x] = throwError $ TypeMismatch StringType (typeOf x)
 readForm args = throwError $ NumArgs 1 (length args)
 
 evalProc :: PrimFexpr
-evalProc (Env env) [(Syntax (AnyExpr expr))] cont = eval env expr (EvalCont cont)
+evalProc (Env env) [(Syntax (AnyExpr expr))] cont = eval env expr (EvalCont env cont)
 evalProc _ _ _ = throwError $ Default "error on eval"
 
 makeApplicationSyntax :: [TVal] -> IOThrowsError TVal

@@ -10,40 +10,45 @@ import Types
 --import Prim
 import Env
 
+--evalForm :: TFexpr
+--evalForm env [form] cont =
+--    eval' env form cont
+--evalForm _ args _ = throwError $ NumArgs 1 (length args)
+
 eval' :: Env -> AnyExpr -> Cont -> IOThrowsError TVal
 eval' env (AnyExpr expr) = eval env expr
 
 eval :: Env -> Expr a -> Cont -> IOThrowsError TVal
-eval env (Symbol s) cont = getVar env s >>= applyCont cont env
-eval env (Lambda params body) cont = makeNormalFunc env params body >>= applyCont cont env
+eval env (Symbol s) cont = getVar env s >>= applyCont cont
+eval env (Lambda params body) cont = makeNormalFunc env params body >>= applyCont cont
 
 -- Function application
 eval env (Application (AnyExpr e) params) cont =
-    eval env e (ApplyCont params [] cont)
+    eval env e (ApplyCont params [] env cont)
 
-eval env (Define (Symbol name) body) cont = eval' env body (DefineCont name cont)
-eval env (Set (Symbol name) body) cont = eval' env body (SetCont name cont)
+eval env (Define (Symbol name) body) cont = eval' env body (DefineCont name env cont)
+eval env (Set (Symbol name) body) cont = eval' env body (SetCont name env cont)
 
-eval env (If pred thenE elseE) cont = eval' env pred (PredCont thenE elseE cont)
+eval env (If pred thenE elseE) cont = eval' env pred (PredCont thenE elseE env cont)
 
 -- TODO: fexprs
-eval env (Fexpr params body) cont = makeFexpr params body >>= applyCont cont env
+eval _ (Fexpr params body) cont = makeFexpr params body >>= applyCont cont
 
-eval env (Val v) cont = applyCont cont env v
+eval _ (Val v) cont = applyCont cont v
 
-eval env (List []) cont = applyCont cont env (TList [])
+eval _ (List []) cont = applyCont cont (TList [])
 eval env (List (x:xs)) cont =
-    eval' env x (SeqCont xs [] cont)
+    eval' env x (SeqCont xs [] env cont)
 
 eval env (CallCC (Left (Symbol fun))) cont =
-    getVar env fun >>= applyCont (ApplyCont [] [Continuation cont] cont) env
+    getVar env fun >>= applyCont (ApplyCont [] [Continuation cont] env cont)
 eval env (CallCC (Right lambda)) cont =
-    eval env lambda (ApplyCont [] [Continuation cont] cont)
+    eval env lambda (ApplyCont [] [Continuation cont] env cont)
 
-apply :: Env -> TVal -> [TVal] -> Cont -> IOThrowsError TVal
-apply env (PrimFunc fun) args cont = fun args >>= applyCont cont env
+apply :: TVal -> [TVal] -> Cont -> IOThrowsError TVal
+apply (PrimFunc fun) args cont = fun args >>= applyCont cont
 
-apply _ (Func params varargs body closure) args cont =
+apply (Func params varargs body closure) args cont =
     if length params /= length args && isNothing varargs
         then throwError $ NumArgs (length params) (length args)
         else liftIO (bindVars closure $ zip (map (\(Symbol s) -> s) params) args) >>=
@@ -57,52 +62,61 @@ apply _ (Func params varargs body closure) args cont =
             Nothing -> return env
 
         evalBody :: Env -> IOThrowsError TVal
-        evalBody env = applyCont (SeqLastCont body cont) env Nil
+        evalBody env = applyCont (SeqLastCont body env cont) Nil
 
-apply env (Continuation c) [param] _ = applyCont c env param
-apply env (Continuation c) [] _ = applyCont c env Nil
+apply (Continuation c) [param] _ = applyCont c param
+apply (Continuation c) [] _ = applyCont c Nil
 
-apply env (PrimFexpr f) params cont = f (Env env) params cont
-apply env (TFexpr params body) args cont =
+apply PrimFexpr{} _ _ = throwError $ Default "fexpr application is not yet implemented."
+apply TFexpr{} _ _ = throwError $ Default "fexpr application is not yet implemented."
+
+apply wtf _ _ = throwError $ TypeMismatch FunctionType (typeOf wtf)
+
+applyFexpr :: TVal -> [TVal] -> Env -> Cont -> IOThrowsError TVal
+applyFexpr (TFexpr params body) args env cont =
     if length params /= length args then
         throwError $ NumArgs (length params) (length args)
     else
         liftIO (bindVars env $ zip (map (\(Symbol s) -> s) params) args) >>= evalBody
   where evalBody :: Env -> IOThrowsError TVal
-        evalBody env = applyCont (SeqLastCont body cont) env Nil
+        evalBody env = applyCont (SeqLastCont body env cont) Nil
 
-apply _ wtf _ _ = throwError $ TypeMismatch FunctionType (typeOf wtf)
-
-
-applyCont :: Cont -> Env -> TVal -> IOThrowsError TVal
-applyCont EndCont _ val = return val
-applyCont (PredCont _ elseE cont) env (Bool False) = eval' env elseE cont
-applyCont (PredCont thenE _ cont) env _ = eval' env thenE cont
-
-applyCont (ApplyCont args _ cont) env fexpr@TFexpr{} =
-    apply env fexpr (map Syntax args) cont
-applyCont (ApplyCont args _ cont) env fexpr@PrimFexpr{} =
-    apply env fexpr (map Syntax args) cont
-
-applyCont (ApplyCont (x:xs) args cont) env fun = do
-    eval' env x (RemoveMeCont xs args fun cont)
-applyCont (ApplyCont [] args cont) env fun = apply env fun args cont
-
-applyCont (SeqCont (x:xs) vals cont) env val =
-    eval' env x (SeqCont xs (vals ++ [val]) cont)
-applyCont (SeqCont [] args cont) env val = applyCont cont env $ TList $ args ++ [val]
-
-applyCont (RemoveMeCont xs args fun cont) env val =
-    applyCont (ApplyCont xs (args ++ [val]) cont) env fun
+applyFexpr notTFexpr _ _ _ = throwError $ TypeMismatch FexprType (typeOf notTFexpr)
 
 
-applyCont (DefineCont name cont) env val = defineVar env name val >>= applyCont cont env
-applyCont (SetCont name cont) env val = setVar env name val >>= applyCont cont env
+applyCont :: Cont -> TVal -> IOThrowsError TVal
+applyCont EndCont val = return val
+applyCont (PredCont _ elseE env cont) (Bool False) = eval' env elseE cont
+applyCont (PredCont thenE _ env cont) _ = eval' env thenE cont
 
-applyCont (SeqLastCont (x:xs) cont) env _ =
-    eval' env x (SeqLastCont xs cont)
+-- TODO: remove RemoveMe
+--applyCont ApplyCont{} TFexpr{} = throwError $ Default "continuation application on Fexprs is not yet implemented"
+applyCont (ApplyCont args _ env cont) fexpr@TFexpr{} =
+    applyFexpr fexpr (map Syntax args) env cont
+--applyCont ApplyCont{} fexpr@TFexpr{} = applyFexpr
+applyCont (ApplyCont args _ env cont) (PrimFexpr fexpr) =
+    fexpr (Env env) (map Syntax args) cont
+--    liftIO $ putStrLn "fexpr application"
+--    fexpr (Env env) (map Syntax args) cont
+applyCont (ApplyCont (x:xs) args env cont) fun = do
+    eval' env x (RemoveMeCont xs args fun env cont)
+applyCont (ApplyCont [] args _ cont) fun = apply fun args cont
 
-applyCont (SeqLastCont [] cont) env v = applyCont cont env v
+applyCont (SeqCont (x:xs) vals env cont) val =
+    eval' env x (SeqCont xs (vals ++ [val]) env cont)
+applyCont (SeqCont [] args _ cont) val = applyCont cont $ TList $ args ++ [val]
 
-applyCont (EvalCont cont) env (Syntax s) = eval' env s cont
-applyCont (EvalCont cont) env val = applyCont cont env val
+applyCont (RemoveMeCont xs args fun env cont) val =
+    applyCont (ApplyCont xs (args ++ [val]) env cont) fun
+
+
+applyCont (DefineCont name env cont) val = defineVar env name val >>= applyCont cont
+applyCont (SetCont name env cont) val = setVar env name val >>= applyCont cont
+
+applyCont (SeqLastCont (x:xs) env cont) _ =
+    eval' env x (SeqLastCont xs env cont)
+
+applyCont (SeqLastCont [] _ cont) v = applyCont cont v
+
+applyCont (EvalCont env cont) (Syntax s) = eval' env s cont
+applyCont (EvalCont _ cont) val = applyCont cont val
