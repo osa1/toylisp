@@ -14,6 +14,7 @@ instance Eq TVal where
     Float f1 == Float f2 = f1 == f2
     Bool b1 == Bool b2 = b1 == b2
     Nil == Nil = True
+    TList lst1 == TList lst2 = lst1 == lst2
     t1 == t2 = if typeOf t1 /= typeOf t2 then False else undefined
 
 
