@@ -13,6 +13,8 @@ data Term = TmTrue
           | TmVar Int Int
           | TmAbs String Ty Term
           | TmApp Term Term
+          | TmAscribe Term Ty
+          | TmInt Int
 
 
 
@@ -55,6 +57,10 @@ typeOf :: Context -> Term -> TypeError Ty
 typeOf _ (TmTrue) = return TyBool
 typeOf _ (TmFalse) = return TyBool
 typeOf _ (TmUnit) = return TyUnit
+typeOf _ (TmInt _) = return TyInt
+typeOf ctx (TmAscribe term ty) = do
+    tt <- typeOf ctx term
+    if tt == ty then return tt else throwError $ TyMsg "body of as-term does not have the expected type"
 typeOf ctx (TmIf guard t e) = do
     gt <- typeOf ctx guard
     if gt == TyBool then
@@ -87,6 +93,8 @@ tests = [ typeOf [("bir", (VarBind TyBool)), ("iki", (VarBind TyBool))] (TmIf Tm
         , typeOf [("p", (VarBind TyInt))] (TmApp (TmAbs "p" TyInt TmTrue) (TmVar 1 1))
         , typeOf [("p", (VarBind TyBool))] (TmApp (TmAbs "p" TyInt TmTrue) (TmVar 1 1))
         , typeOf [] (TmUnit)
+        , typeOf [] (TmAscribe (TmAbs "" TyBool (TmInt 10)) (TyArr TyBool TyInt))
+        , typeOf [] (TmAscribe (TmTrue) TyInt)
         ]
 
 main :: IO ()
