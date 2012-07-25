@@ -15,6 +15,7 @@ data Term = TmTrue
           | TmApp Term Term
           | TmAscribe Term Ty
           | TmInt Int
+          | TmLet String Term Term
 
 
 
@@ -86,6 +87,10 @@ typeOf ctx (TmApp t1 t2) = do
                                     else
                                         throwError $ TyErr paramty tyt2
         _ -> throwError $ TyMsg "arrow type expected"
+typeOf ctx (TmLet name t1 t2) = do
+    tyt1 <- typeOf ctx t1
+    let ctx' = addBinding ctx name (VarBind tyt1)
+    typeOf ctx' t2
 
 tests :: [TypeError Ty]
 tests = [ typeOf [("bir", (VarBind TyBool)), ("iki", (VarBind TyBool))] (TmIf TmTrue (TmVar 1 1) (TmVar 2 1))
@@ -95,6 +100,10 @@ tests = [ typeOf [("bir", (VarBind TyBool)), ("iki", (VarBind TyBool))] (TmIf Tm
         , typeOf [] (TmUnit)
         , typeOf [] (TmAscribe (TmAbs "" TyBool (TmInt 10)) (TyArr TyBool TyInt))
         , typeOf [] (TmAscribe (TmTrue) TyInt)
+        , typeOf [] (TmLet "a" (TmInt 10) (TmVar 1 1))
+        , typeOf [] (TmLet "bir" TmTrue (TmLet "iki" TmFalse (TmIf TmTrue (TmVar 1 1) (TmVar 2 1))))
+        , typeOf [] (TmLet "bir" (TmInt 10) (TmLet "iki" TmFalse (TmIf TmTrue (TmVar 1 1) (TmVar 2 1))))
+        , typeOf [] (TmLet "bir" TmTrue (TmLet "iki" (TmInt 20) (TmIf TmTrue (TmVar 1 1) (TmVar 2 1))))
         ]
 
 main :: IO ()
