@@ -8,6 +8,7 @@ import Control.Monad.Identity
 
 data Term = TmTrue
           | TmFalse
+          | TmUnit
           | TmIf Term Term Term
           | TmVar Int Int
           | TmAbs String Ty Term
@@ -17,6 +18,7 @@ data Term = TmTrue
 
 data Ty = TyBool
         | TyInt
+        | TyUnit
         | TyArr Ty Ty
     deriving (Show, Eq)
 
@@ -52,6 +54,7 @@ type TypeError = Either TyErr
 typeOf :: Context -> Term -> TypeError Ty
 typeOf _ (TmTrue) = return TyBool
 typeOf _ (TmFalse) = return TyBool
+typeOf _ (TmUnit) = return TyUnit
 typeOf ctx (TmIf guard t e) = do
     gt <- typeOf ctx guard
     if gt == TyBool then
@@ -83,6 +86,7 @@ tests = [ typeOf [("bir", (VarBind TyBool)), ("iki", (VarBind TyBool))] (TmIf Tm
         , typeOf [("bir", (VarBind TyBool)), ("iki", (VarBind TyInt))] (TmIf TmTrue (TmVar 1 1) (TmVar 2 1))
         , typeOf [("p", (VarBind TyInt))] (TmApp (TmAbs "p" TyInt TmTrue) (TmVar 1 1))
         , typeOf [("p", (VarBind TyBool))] (TmApp (TmAbs "p" TyInt TmTrue) (TmVar 1 1))
+        , typeOf [] (TmUnit)
         ]
 
 main :: IO ()
