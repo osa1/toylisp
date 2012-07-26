@@ -16,6 +16,7 @@ data Term = TmTrue
           | TmAscribe Term Ty
           | TmInt Int
           | TmLet String Term Term
+          | TmTuple [Term]
 
 
 
@@ -23,6 +24,7 @@ data Ty = TyBool
         | TyInt
         | TyUnit
         | TyArr Ty Ty
+        | TyTuple [Ty]
     deriving (Show, Eq)
 
 
@@ -91,6 +93,10 @@ typeOf ctx (TmLet name t1 t2) = do
     tyt1 <- typeOf ctx t1
     let ctx' = addBinding ctx name (VarBind tyt1)
     typeOf ctx' t2
+typeOf ctx (TmTuple terms) = do
+    ty <- mapM (typeOf ctx) terms
+    return $ TyTuple ty
+
 
 tests :: [TypeError Ty]
 tests = [ typeOf [("bir", (VarBind TyBool)), ("iki", (VarBind TyBool))] (TmIf TmTrue (TmVar 1 1) (TmVar 2 1))
@@ -104,6 +110,7 @@ tests = [ typeOf [("bir", (VarBind TyBool)), ("iki", (VarBind TyBool))] (TmIf Tm
         , typeOf [] (TmLet "bir" TmTrue (TmLet "iki" TmFalse (TmIf TmTrue (TmVar 1 1) (TmVar 2 1))))
         , typeOf [] (TmLet "bir" (TmInt 10) (TmLet "iki" TmFalse (TmIf TmTrue (TmVar 1 1) (TmVar 2 1))))
         , typeOf [] (TmLet "bir" TmTrue (TmLet "iki" (TmInt 20) (TmIf TmTrue (TmVar 1 1) (TmVar 2 1))))
+        , typeOf [] (TmTuple [TmFalse, TmTrue, TmInt 10, TmAbs "" TyInt TmFalse])
         ]
 
 main :: IO ()
