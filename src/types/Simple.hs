@@ -17,6 +17,7 @@ data Term = TmTrue
           | TmInt Int
           | TmLet String Term Term
           | TmTuple [Term]
+          | TmProj Term Int
 
 
 
@@ -96,6 +97,9 @@ typeOf ctx (TmLet name t1 t2) = do
 typeOf ctx (TmTuple terms) = do
     ty <- mapM (typeOf ctx) terms
     return $ TyTuple ty
+typeOf ctx (TmProj term idx) = do
+    tuple <- typeOf ctx term
+    return $ (\(TyTuple types) -> types) tuple !! idx
 
 
 tests :: [TypeError Ty]
@@ -111,6 +115,7 @@ tests = [ typeOf [("bir", (VarBind TyBool)), ("iki", (VarBind TyBool))] (TmIf Tm
         , typeOf [] (TmLet "bir" (TmInt 10) (TmLet "iki" TmFalse (TmIf TmTrue (TmVar 1 1) (TmVar 2 1))))
         , typeOf [] (TmLet "bir" TmTrue (TmLet "iki" (TmInt 20) (TmIf TmTrue (TmVar 1 1) (TmVar 2 1))))
         , typeOf [] (TmTuple [TmFalse, TmTrue, TmInt 10, TmAbs "" TyInt TmFalse])
+        , typeOf [] (TmProj (TmTuple [TmFalse, TmTrue, TmInt 10, TmAbs "" TyInt TmFalse]) 2)
         ]
 
 main :: IO ()
