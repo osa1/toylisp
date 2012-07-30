@@ -3,20 +3,39 @@
                 -fno-warn-hi-shadowing
                 -fno-warn-unused-do-bind
                 -fno-warn-name-shadowing #-}
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE GADTs, NamedFieldPuns #-}
 
 module TC where
 
 import Prelude
-import Types hiding (typeOf)
+import Types
 import qualified Data.Map as M
-import Data.IORef (readIORef, modifyIORef, newIORef, writeIORef)
-import Control.Monad (liftM, liftM2)
-import Data.Maybe (isNothing)
+import Data.IORef (readIORef, modifyIORef, newIORef)
+--import Control.Monad (liftM, liftM2)
 import Control.Monad.Error
 
 import Parser
 import Text.ParserCombinators.Parsec
+
+class Typed e where
+    typeOf :: TypedEnv -> e -> IOTypeError TType
+
+instance Typed TVal where
+    typeOf _ Char{} = return CharTy
+    typeOf _ String{} = return StringTy
+    typeOf _ TSymbol{} = return SymbolTy
+    typeOf _ Int{} = return IntTy
+    typeOf _ Float{} = return FloatTy
+    typeOf _ (TFunc Func{params,ret}) =
+        return $ FuncTy (map (\((Symbol s),ty) -> (s, ty)) params) ret
+    typeOf _ (TFunc PrimFunc{primFParams=params,primtFRet=ret}) =
+        return $ FuncTy (map (\((Symbol s),ty) -> (s, ty)) params) ret
+    typeOf _ TList{} = return LstTy
+    typeOf _ Bool{} = return BoolTy
+    typeOf _ Continuation{} = return ContTy
+    typeOf _ Syntax{} = return StxType
+    typeOf _ Env{} = return EnvTy
+    typeOf _ Nil{} = return NilTy
 
 type TypeError = String
 
@@ -43,48 +62,52 @@ addLocalBindings :: TypedEnv -> [(String, TType)] -> TypedEnv
 addLocalBindings (global,scope) bindings = (global, bindings:scope)
 
 addGlobalBinding :: TypedEnv -> (String, TType) -> IO ()
-addGlobalBinding (global,_) (name,ty) = do
-    env <- readIORef global
-    let env' = M.insert name ty env
-    writeIORef global env'
+addGlobalBinding (global,_) (name,ty) =
+    modifyIORef global $ \env -> M.insert name ty env
 
-typeOf :: TypedEnv -> AnyExpr -> IOTypeError TType
-typeOf env (AnyExpr (Symbol s)) = TC.lookup env s
-typeOf env (AnyExpr (Lambda params body)) = do
-    let env' = addLocalBindings env (map (\((Symbol s), ty) -> (s, ty)) params)
-    liftM last $ checkSeq env' body
-typeOf env (AnyExpr (Application x xs)) = do
-    ft <- typeOf env x
-    case ft of
-        (FuncTy params ret) -> do
-            ptys <- checkSeq env xs
-            if (map snd params) == ptys then return ret else throwError "type error on parameters"
-        _ -> throwError "Application to a non-function data"
-typeOf env (AnyExpr (If guard thenE elseE)) = do
-    guardty <- typeOf env guard
-    if guardty /= BoolTy then
-        throwError "Guard is not boolean type"
-    else do
-        thenty <- typeOf env thenE
-        elsety <- typeOf env elseE
-        if thenty == elsety then return thenty else throwError "then and else expression are not same type"
-typeOf _ (AnyExpr (Val tval)) = return $ case tval of
-    Char{} -> CharTy
-    String{} -> StringTy
-    TSymbol{} -> SymbolTy
-    Int{} -> IntTy
-    Float{} -> FloatTy
-    TFunc{} -> FuncTy [] NilTy
-    TList{} -> LstTy
-    Bool{} -> BoolTy
-    Continuation{} -> ContTy
-    Syntax{} -> StxType
-    Env{} -> EnvTy
-    Nil{} -> NilTy
-typeOf _ expr = throwError $ "not yet implemented: " ++ show expr
-
-checkSeq :: TypedEnv -> [AnyExpr] -> IOTypeError [TType]
+checkSeq :: Typed a => TypedEnv -> [a] -> ErrorT TypeError IO [TType]
 checkSeq env exprs = sequence $ map (typeOf env) exprs
+
+instance Typed AnyExpr where
+  typeOf env (AnyExpr (Symbol s)) = TC.lookup env s
+  typeOf env (AnyExpr (Lambda params body)) = do
+      let env' = addLocalBindings env (map (\((Symbol s), ty) -> (s, ty)) params)
+      liftM last $ checkSeq env' body
+  typeOf env (AnyExpr (Application x xs)) = do
+      ft <- typeOf env x
+      case ft of
+          (FuncTy params ret) -> do
+              ptys <- checkSeq env xs
+              if (map snd params) == ptys then return ret else throwError "type error on parameters"
+          _ -> throwError "Application to a non-function data"
+  typeOf env (AnyExpr (If guard thenE elseE)) = do
+      guardty <- typeOf env guard
+      if guardty /= BoolTy then
+          throwError "Guard is not boolean type"
+      else do
+          thenty <- typeOf env thenE
+          elsety <- typeOf env elseE
+          if thenty == elsety then return thenty else throwError "then and else expression are not same type"
+  typeOf _ (AnyExpr (Val tval)) = return $ case tval of
+      Char{} -> CharTy
+      String{} -> StringTy
+      TSymbol{} -> SymbolTy
+      Int{} -> IntTy
+      Float{} -> FloatTy
+      (TFunc Func{params,ret}) ->
+          FuncTy (map (\((Symbol s),ty) -> (s, ty)) params) ret
+      (TFunc PrimFunc{primFParams=params,primtFRet=ret}) ->
+          FuncTy (map (\((Symbol s),ty) -> (s, ty)) params) ret
+      TList{} -> LstTy
+      Bool{} -> BoolTy
+      Continuation{} -> ContTy
+      Syntax{} -> StxType
+      Env{} -> EnvTy
+      Nil{} -> NilTy
+  typeOf _ expr = throwError $ "not yet implemented: " ++ show expr
+
+instance Typed (Expr a) where
+    typeOf env expr = typeOf env (AnyExpr expr)
 
 -- tests -----------------------------------------------
 

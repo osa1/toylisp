@@ -70,7 +70,10 @@ data TFunc = Func { params :: [(Expr Symbol, TType)]
                   , closure :: Env
                   , ret :: TType
                   }
-           | PrimFunc PrimFunc
+           | PrimFunc { primF :: ([TVal] -> IOThrowsError TVal)
+                      , primFParams :: [(Expr Symbol, TType)]
+                      , primtFRet :: TType
+                      }
 
 data TVal = Char Char
           | String String
@@ -95,27 +98,6 @@ data TVal = Char Char
           | Env Env
           | Nil
   --deriving (Eq) -- I need some custom equality rules
-
-class Typed e where
-    typeOf :: e -> TType
-
-instance Typed TVal where
-    typeOf Char{} = CharTy
-    typeOf String{} = StringTy
-    typeOf TSymbol{} = SymbolTy
-    typeOf Int{} = IntTy
-    typeOf Float{} = FloatTy
-    typeOf TFunc{} = FuncTy [] NilTy
-    --typeOf PrimFunc{} = FuncTy
-    --typeOf PrimFexpr{} = FexprTy
-    --typeOf TFexpr{} = FexprTy
-    typeOf TList{} = LstTy
-    typeOf Bool{} = BoolTy
-    typeOf Continuation{} = ContTy
-    typeOf Syntax{} = StxType
-    typeOf Env{} = EnvTy
-    typeOf Nil{} = NilTy
-
 
 -- Errors
 
