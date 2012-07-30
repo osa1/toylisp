@@ -18,17 +18,16 @@ data Term = TmTrue
           | TmLet String Term Term
           | TmTuple [Term]
           | TmProj Term Int
-
-
+          | TmRecord [(String, Term)]
+          | TmRecProj Term String
 
 data Ty = TyBool
         | TyInt
         | TyUnit
         | TyArr Ty Ty
         | TyTuple [Ty]
+        | TyRecord [(String, Ty)]
     deriving (Show, Eq)
-
-
 
 type Context = [(String, Binding)]
 data Binding = VarBind Ty
@@ -100,7 +99,16 @@ typeOf ctx (TmTuple terms) = do
 typeOf ctx (TmProj term idx) = do
     tuple <- typeOf ctx term
     return $ (\(TyTuple types) -> types) tuple !! idx
-
+typeOf ctx (TmRecord terms) = do
+    tys <- mapM (typeOf ctx) (map snd terms)
+    return $ TyRecord (zip (map fst terms) tys)
+typeOf ctx (TmRecProj term name) = do
+     tyt <- typeOf ctx term
+     case tyt of
+        (TyRecord tys) -> case lookup name tys of
+                            Just t -> return t
+                            Nothing -> throwError $ TyMsg "wrong record slot name"
+        _ -> throwError $ TyMsg "record type expected"
 
 tests :: [TypeError Ty]
 tests = [ typeOf [("bir", (VarBind TyBool)), ("iki", (VarBind TyBool))] (TmIf TmTrue (TmVar 1 1) (TmVar 2 1))
@@ -116,15 +124,10 @@ tests = [ typeOf [("bir", (VarBind TyBool)), ("iki", (VarBind TyBool))] (TmIf Tm
         , typeOf [] (TmLet "bir" TmTrue (TmLet "iki" (TmInt 20) (TmIf TmTrue (TmVar 1 1) (TmVar 2 1))))
         , typeOf [] (TmTuple [TmFalse, TmTrue, TmInt 10, TmAbs "" TyInt TmFalse])
         , typeOf [] (TmProj (TmTuple [TmFalse, TmTrue, TmInt 10, TmAbs "" TyInt TmFalse]) 2)
+        , typeOf [] (TmLet "record" (TmRecord [("a",TmInt 10),("b",TmTrue)]) (TmRecProj (TmVar 1 1) "b"))
         ]
 
 main :: IO ()
 main = do
     mapM (putStrLn . show) tests
     return ()
-
-
-
-
-
-
