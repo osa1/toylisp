@@ -251,7 +251,7 @@ parseAnyExpr = do
             , anyExpr $ try parseFexprDefine
             , anyExpr $ try parseFexpr
             , anyExpr $ try parseSymbol
-            , anyExpr $ parseLambda
+            , anyExpr $ try parseLambda
             , anyExpr $ try parseIf
             , anyExpr $ try parseCallCC
             , anyExpr $ try parseDef
