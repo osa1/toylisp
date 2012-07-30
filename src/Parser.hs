@@ -87,10 +87,23 @@ parseSymbol = do
   spaces
   return $ Symbol (first : rest)
 
-parseArgList :: Parser [Expr Symbol]
+parseTypeName :: Parser TType
+parseTypeName = (try $ spString "int" >> return IntTy)
+            <|> (try $ spString "bool" >> return BoolTy)
+
+parseArgList :: Parser [(Expr Symbol, TType)]
 parseArgList = (spChar '(' >> many spacedArg) <* spChar ')'
-  where spacedArg :: Parser (Expr Symbol)
-        spacedArg = parseSymbol <* spaces
+  where spacedArg :: Parser (Expr Symbol, TType)
+        spacedArg = do name <- parseSymbol
+                       spChar ':'
+                       ty <- parseTypeName
+                       spaces
+                       return (name, ty)
+
+--parseArgList :: Parser [Expr Symbol]
+--parseArgList = (spChar '(' >> many spacedArg) <* spChar ')'
+--  where spacedArg :: Parser (Expr Symbol)
+--        spacedArg = parseSymbol <* spaces
 
 parseLambda :: Parser (Expr Lambda)
 parseLambda = do
@@ -238,7 +251,7 @@ parseAnyExpr = do
             , anyExpr $ try parseFexprDefine
             , anyExpr $ try parseFexpr
             , anyExpr $ try parseSymbol
-            , anyExpr $ try parseLambda
+            , anyExpr $ parseLambda
             , anyExpr $ try parseIf
             , anyExpr $ try parseCallCC
             , anyExpr $ try parseDef

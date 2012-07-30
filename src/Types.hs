@@ -8,8 +8,17 @@ import Text.ParserCombinators.Parsec (ParseError)
 import Data.List (intercalate)
 
 import Data.IORef (IORef, newIORef)
+import qualified Data.Map as M
 
 type Env = IORef [(String, IORef TVal)]
+
+type GlobalEnv = IORef (M.Map String (IORef TVal))
+type NamedEnv = (GlobalEnv, [[(String, TVal)]])
+
+type TypedGlobalEnv = IORef (M.Map String TType)
+
+--data TypedEnv a = (TypedGlobalEnv, [[(String, a)]])
+type TypedEnv = (TypedGlobalEnv, [[(String, TType)]])
 
 nullEnv :: IO Env
 nullEnv = newIORef Nil >>= \ref -> newIORef [("nil", ref)]
@@ -27,10 +36,10 @@ data Set
 
 data Expr a where
     Symbol :: String -> Expr Symbol
-    Lambda :: [Expr Symbol] -> [AnyExpr] -> Expr Lambda
+    Lambda :: [(Expr Symbol, TType)] -> [AnyExpr] -> Expr Lambda
     Application :: AnyExpr -> [AnyExpr] -> Expr Application
     If :: AnyExpr -> AnyExpr -> AnyExpr -> Expr If
-    Fexpr :: [Expr Symbol] -> [AnyExpr] -> Expr Fexpr
+    Fexpr :: [(Expr Symbol, TType)] -> [AnyExpr] -> Expr Fexpr
     Val :: TVal -> Expr Val
     List :: [AnyExpr] -> Expr List
 
@@ -51,25 +60,34 @@ data AnyExpr where
 instance Show AnyExpr where
     show (AnyExpr a) = show a
 
-data TType = CharType | StringType | SymbolType | IntType | FloatType | FunctionType
-    | ListType | BoolType | ContinuationType | SyntaxType | FexprType | EnvType | NilType
+data TType = CharTy | StringTy | SymbolTy | IntTy | FloatTy | FuncTy [(String, TType)] TType
+    | LstTy | BoolTy | ContTy | StxType | FexprTy | EnvTy | NilTy
   deriving (Show, Eq)
+
+data TFunc = Func { params :: [(Expr Symbol, TType)]
+                  , varargs :: Maybe (Expr Symbol)
+                  , body :: [AnyExpr]
+                  , closure :: Env
+                  , ret :: TType
+                  }
+           | PrimFunc PrimFunc
 
 data TVal = Char Char
           | String String
           | TSymbol String
           | Int Int
           | Float Float
-          | Func { params :: [Expr Symbol]
-                 , varargs :: Maybe (Expr Symbol)
-                 , body :: [AnyExpr]
-                 , closure :: Env
-                 }
-          | PrimFunc PrimFunc
-          | PrimFexpr PrimFexpr
-          | TFexpr { fexprParams :: [Expr Symbol]
-                   , fexprBody :: [AnyExpr]
-                   }
+          | TFunc TFunc
+          -- | Func { params :: [Expr Symbol]
+          --        , varargs :: Maybe (Expr Symbol)
+          --        , body :: [AnyExpr]
+          --        , closure :: Env
+          --        }
+          -- | PrimFunc PrimFunc
+          -- | PrimFexpr PrimFexpr
+          -- | TFexpr { fexprParams :: [Expr Symbol]
+          --          , fexprBody :: [AnyExpr]
+          --          }
           | TList [TVal]
           | Bool Bool
           | Continuation Cont
@@ -82,21 +100,21 @@ class Typed e where
     typeOf :: e -> TType
 
 instance Typed TVal where
-    typeOf Char{} = CharType
-    typeOf String{} = StringType
-    typeOf TSymbol{} = SymbolType
-    typeOf Int{} = IntType
-    typeOf Float{} = FloatType
-    typeOf Func{} = FunctionType
-    typeOf PrimFunc{} = FunctionType
-    typeOf PrimFexpr{} = FexprType
-    typeOf TFexpr{} = FexprType
-    typeOf TList{} = ListType
-    typeOf Bool{} = BoolType
-    typeOf Continuation{} = ContinuationType
-    typeOf Syntax{} = SyntaxType
-    typeOf Env{} = EnvType
-    typeOf Nil{} = NilType
+    typeOf Char{} = CharTy
+    typeOf String{} = StringTy
+    typeOf TSymbol{} = SymbolTy
+    typeOf Int{} = IntTy
+    typeOf Float{} = FloatTy
+    typeOf TFunc{} = FuncTy [] NilTy
+    --typeOf PrimFunc{} = FuncTy
+    --typeOf PrimFexpr{} = FexprTy
+    --typeOf TFexpr{} = FexprTy
+    typeOf TList{} = LstTy
+    typeOf Bool{} = BoolTy
+    typeOf Continuation{} = ContTy
+    typeOf Syntax{} = StxType
+    typeOf Env{} = EnvTy
+    typeOf Nil{} = NilTy
 
 
 -- Errors
@@ -131,8 +149,9 @@ unwordsList = unwords . map (\(AnyExpr e) -> show e)
 
 
 -- Function constructors
-makeFunc :: Maybe (Expr Symbol) -> Env -> [Expr Symbol] -> [AnyExpr] -> IOThrowsError TVal
-makeFunc varargs env params body = return $ Func params varargs body env
+--makeFunc :: Maybe (Expr Symbol) -> Env -> [Expr Symbol] -> [AnyExpr] -> IOThrowsError TVal
+--makeFunc varargs env params body = return $ TFunc (Func params varargs body env)
+makeFunc = undefined
 
 makeNormalFunc :: Env -> [Expr Symbol] -> [AnyExpr] -> IOThrowsError TVal
 makeNormalFunc = makeFunc Nothing
@@ -140,9 +159,9 @@ makeNormalFunc = makeFunc Nothing
 makeVarargs :: Expr Symbol -> Env -> [Expr Symbol] -> [AnyExpr] -> IOThrowsError TVal
 makeVarargs = makeFunc . Just
 
--- Fexpr constructro
-makeFexpr :: [Expr Symbol] -> [AnyExpr] -> IOThrowsError TVal
-makeFexpr params body = return $ TFexpr params body
+-- Fexpr constructor
+--makeFexpr :: [Expr Symbol] -> [AnyExpr] -> IOThrowsError TVal
+--makeFexpr params body = return $ TFexpr params body
 
 -- Continuations
 
@@ -154,7 +173,7 @@ data Cont = EndCont
           -- Function application
           | ApplyCont [AnyExpr] [TVal] Env Cont
           | SeqCont [AnyExpr] [TVal] Env Cont
-          | RemoveMeCont [AnyExpr] [TVal] TVal Env Cont
+          | BindApplyCont [AnyExpr] [TVal] TVal Env Cont
           | SeqLastCont [AnyExpr] Env Cont
           | EvalCont Env Cont
 
@@ -198,10 +217,10 @@ instance Show TVal where
     show (TSymbol s) = s
     show (Int i) = show i
     show (Float f) = show f
-    show Func{} = "<Function>"
-    show PrimFunc{} = "<Function>"
-    show PrimFexpr{} = "<Fexpr>"
-    show TFexpr{} = "<Fexpr>"
+    show TFunc{} = "<Function>"
+    --show PrimFunc{} = "<Function>"
+    --show PrimFexpr{} = "<Fexpr>"
+    --show TFexpr{} = "<Fexpr>"
     show (TList l) = show l
     show (Bool b) = show b
     show Continuation{} = "<Continuation>"

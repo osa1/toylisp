@@ -87,17 +87,17 @@ errorOrFalse n vals = if length vals /= n then
 -- is there a way to generate this repetitive code?
 first :: PrimFunc
 first [TList lst] = return $ head lst
-first [notList] = throwError $ TypeMismatch ListType (typeOf notList)
+first [notList] = throwError $ TypeMismatch LstTy (typeOf notList)
 first args = throwError $ NumArgs 1 (length args)
 
 rest :: PrimFunc
 rest [TList lst] = return $ TList (tail lst)
-rest [notList] = throwError $ TypeMismatch ListType (typeOf notList)
+rest [notList] = throwError $ TypeMismatch LstTy (typeOf notList)
 rest args = throwError $ NumArgs 1 (length args)
 
 cons :: PrimFunc
 cons [v, TList lst] = return $ TList (v : lst)
-cons [_, notLst] = throwError $ TypeMismatch ListType (typeOf notLst)
+cons [_, notLst] = throwError $ TypeMismatch LstTy (typeOf notLst)
 cons args = throwError $ NumArgs 2 (length args)
 
 stringp :: PrimFunc
@@ -127,7 +127,7 @@ typeOfFun args = throwError $ NumArgs 1 (length args)
 
 symbolToString :: PrimFunc
 symbolToString [TSymbol s] = return $ String s
-symbolToString [notSymbol] = throwError $ TypeMismatch SymbolType (typeOf notSymbol)
+symbolToString [notSymbol] = throwError $ TypeMismatch SymbolTy (typeOf notSymbol)
 symbolToString args = throwError $ NumArgs 1 (length args)
 
 numericBinop :: (Int -> Int -> Int) -> [TVal] -> IOThrowsError TVal
@@ -148,13 +148,13 @@ numBoolBinop = boolBinop unpackNum
 
 unpackNum :: TVal -> IOThrowsError Int
 unpackNum (Int n) = return n
-unpackNum notNum = throwError $ TypeMismatch IntType (typeOf notNum)
+unpackNum notNum = throwError $ TypeMismatch IntTy (typeOf notNum)
 
 boolBoolBinop :: (Bool -> Bool -> Bool) -> [TVal] -> IOThrowsError TVal
 boolBoolBinop = boolBinop unpackBool
   where unpackBool :: TVal -> IOThrowsError Bool
         unpackBool (Bool b) = return b
-        unpackBool notBool = throwError $ TypeMismatch BoolType (typeOf notBool)
+        unpackBool notBool = throwError $ TypeMismatch BoolTy (typeOf notBool)
 
 
 --strBoolBinop :: (String -> String -> Bool) -> [LispVal] -> IOThrowsError LispVal
@@ -229,7 +229,7 @@ eq params = if length params /= 2 then
 
 readForm :: [TVal] -> IOThrowsError TVal
 readForm [String form] = readAsSyntax form
-readForm [x] = throwError $ TypeMismatch StringType (typeOf x)
+readForm [x] = throwError $ TypeMismatch StringTy (typeOf x)
 readForm args = throwError $ NumArgs 1 (length args)
 
 evalProc :: PrimFexpr

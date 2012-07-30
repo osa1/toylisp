@@ -70,7 +70,7 @@ apply (Continuation c) [] _ = applyCont c Nil
 apply PrimFexpr{} _ _ = throwError $ Default "fexpr application is not yet implemented."
 apply TFexpr{} _ _ = throwError $ Default "fexpr application is not yet implemented."
 
-apply wtf _ _ = throwError $ TypeMismatch FunctionType (typeOf wtf)
+apply wtf _ _ = throwError $ TypeMismatch FuncTy (typeOf wtf)
 
 applyFexpr :: TVal -> [TVal] -> Env -> Cont -> IOThrowsError TVal
 applyFexpr (TFexpr params body) args env cont =
@@ -81,7 +81,7 @@ applyFexpr (TFexpr params body) args env cont =
   where evalBody :: Env -> IOThrowsError TVal
         evalBody env = applyCont (SeqLastCont body env cont) Nil
 
-applyFexpr notTFexpr _ _ _ = throwError $ TypeMismatch FexprType (typeOf notTFexpr)
+applyFexpr notTFexpr _ _ _ = throwError $ TypeMismatch FexprTy (typeOf notTFexpr)
 
 
 applyCont :: Cont -> TVal -> IOThrowsError TVal
@@ -99,14 +99,14 @@ applyCont (ApplyCont args _ env cont) (PrimFexpr fexpr) =
 --    liftIO $ putStrLn "fexpr application"
 --    fexpr (Env env) (map Syntax args) cont
 applyCont (ApplyCont (x:xs) args env cont) fun = do
-    eval' env x (RemoveMeCont xs args fun env cont)
+    eval' env x (BindApplyCont xs args fun env cont)
 applyCont (ApplyCont [] args _ cont) fun = apply fun args cont
 
 applyCont (SeqCont (x:xs) vals env cont) val =
     eval' env x (SeqCont xs (vals ++ [val]) env cont)
 applyCont (SeqCont [] args _ cont) val = applyCont cont $ TList $ args ++ [val]
 
-applyCont (RemoveMeCont xs args fun env cont) val =
+applyCont (BindApplyCont xs args fun env cont) val =
     applyCont (ApplyCont xs (args ++ [val]) env cont) fun
 
 
