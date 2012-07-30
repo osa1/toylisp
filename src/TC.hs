@@ -68,37 +68,43 @@ typeOf env (AnyExpr (If guard thenE elseE)) = do
         thenty <- typeOf env thenE
         elsety <- typeOf env elseE
         if thenty == elsety then return thenty else throwError "then and else expression are not same type"
-typeOf _ _ = throwError "not yet implemented"
-
---checkBindings :: NamedEnv -> AnyExpr -> IO (Maybe BindingError)
---checkBindings env (AnyExpr (Symbol s)) = do
---    r <- lookup env s
---    if r then return Nothing else return $ Just s
---checkBindings env (AnyExpr (Lambda params body)) = do
---    let env' = addLocalBindings env (map (\(Symbol s) -> s) params)
---    checkBindingsSeq env' body
---checkBindings env (AnyExpr (Application x xs)) = checkBindingsSeq env (x:xs)
---checkBindings env (AnyExpr (If guard thenE elseE)) = checkBindingsSeq env [guard,thenE,elseE]
---checkBindings _   (AnyExpr Val{}) = return Nothing
---checkBindings env (AnyExpr (List exprs)) = checkBindingsSeq env exprs
---checkBindings env (AnyExpr (Define (Symbol name) body)) = addGlobalBinding env name >> checkBindings env body
---checkBindings env (AnyExpr (Set name body)) = checkBindings env (AnyExpr name) >> checkBindings env body
+typeOf _ (AnyExpr (Val tval)) = return $ case tval of
+    Char{} -> CharTy
+    String{} -> StringTy
+    TSymbol{} -> SymbolTy
+    Int{} -> IntTy
+    Float{} -> FloatTy
+    TFunc{} -> FuncTy [] NilTy
+    TList{} -> LstTy
+    Bool{} -> BoolTy
+    Continuation{} -> ContTy
+    Syntax{} -> StxType
+    Env{} -> EnvTy
+    Nil{} -> NilTy
+typeOf _ expr = throwError $ "not yet implemented: " ++ show expr
 
 checkSeq :: TypedEnv -> [AnyExpr] -> IOTypeError [TType]
 checkSeq env exprs = sequence $ map (typeOf env) exprs
 
 -- tests -----------------------------------------------
 
---main :: IO ()
---main = do
---    let expr = parse parseAnyExpr "tc test" "(lambda (x) (+ y 1))"
---    env <- newNamedEnv
---    --addGlobalBinding env "y"
---    case expr of
---        Left err -> putStrLn (show err)
---        Right e -> do
---          r <- checkBindings env e
---          putStrLn (show r)
+runTC :: IOTypeError TType -> IO (Either TypeError TType)
+runTC action = do
+    r <- runErrorT action
+    return r
+
+main :: IO ()
+main = do
+    let expr = parse parseAnyExpr "tc test" "(lambda (x : int) (+ y 1))"
+    env <- newTypedEnv
+    addGlobalBinding env ("y", BoolTy)
+    case expr of
+        Left err -> putStrLn (show err)
+        Right e -> do
+          r <- runTC $ typeOf env e
+          putStrLn $ show r
+          return ()
+
 
 
 
