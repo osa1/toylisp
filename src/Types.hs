@@ -1,27 +1,22 @@
+{-# OPTIONS_GHC -Wall
+                -fno-warn-hi-shadowing
+                -fno-warn-name-shadowing
+                -fno-warn-unused-do-bind #-}
 {-# LANGUAGE NoMonomorphismRestriction, GADTs, NamedFieldPuns #-}
-{-# OPTIONS_GHC -Wall -fno-warn-hi-shadowing -fno-warn-name-shadowing -fno-warn-unused-do-bind #-}
 
 module Types where
 
 import Control.Monad.Error (Error(..), runErrorT, ErrorT(..))
 import Text.ParserCombinators.Parsec (ParseError)
-import Data.List (intercalate)
-
 import Data.IORef (IORef, newIORef)
+import Data.List (intercalate)
 import qualified Data.Map as M
 
-type Env = IORef [(String, IORef TVal)]
-
-type GlobalEnv = IORef (M.Map String (IORef TVal))
-type NamedEnv = (GlobalEnv, [[(String, TVal)]])
-
-type TypedGlobalEnv = IORef (M.Map String TType)
-
---data TypedEnv a = (TypedGlobalEnv, [[(String, a)]])
-type TypedEnv = (TypedGlobalEnv, [[(String, TType)]])
-
-nullEnv :: IO Env
-nullEnv = newIORef Nil >>= \ref -> newIORef [("nil", ref)]
+type GlobalEnv a = IORef (M.Map String a)
+type Env a = ((GlobalEnv a), [[(String, a)]])
+--data Env a = Env (GlobalEnv a) [[(String, a)]]
+type Binding = (TVal, TType)
+type TEnv = Env Binding
 
 data Symbol
 data Lambda
@@ -60,43 +55,31 @@ data AnyExpr where
 instance Show AnyExpr where
     show (AnyExpr a) = show a
 
-data TType = CharTy | StringTy | SymbolTy | IntTy | FloatTy | FuncTy [(String, TType)] TType
-    | LstTy | BoolTy | ContTy | StxType | FexprTy | EnvTy | NilTy
+data TType = CharTy | StringTy | IntTy | FloatTy | FuncTy [(String, TType)] TType
+    | LstTy | BoolTy | ContTy | StxType | UnitTy
   deriving (Show, Eq)
 
 data TFunc = Func { params :: [(Expr Symbol, TType)]
                   , varargs :: Maybe (Expr Symbol)
                   , body :: [AnyExpr]
-                  , closure :: Env
+                  , closure :: TEnv
                   , ret :: TType
                   }
            | PrimFunc { primF :: ([TVal] -> IOThrowsError TVal)
                       , primFParams :: [(Expr Symbol, TType)]
-                      , primtFRet :: TType
+                      , primFRet :: TType
                       }
 
 data TVal = Char Char
           | String String
-          | TSymbol String
           | Int Int
           | Float Float
           | TFunc TFunc
-          -- | Func { params :: [Expr Symbol]
-          --        , varargs :: Maybe (Expr Symbol)
-          --        , body :: [AnyExpr]
-          --        , closure :: Env
-          --        }
-          -- | PrimFunc PrimFunc
-          -- | PrimFexpr PrimFexpr
-          -- | TFexpr { fexprParams :: [Expr Symbol]
-          --          , fexprBody :: [AnyExpr]
-          --          }
           | TList [TVal]
           | Bool Bool
           | Continuation Cont
           | Syntax AnyExpr
-          | Env Env
-          | Nil
+          | Unit
   --deriving (Eq) -- I need some custom equality rules
 
 -- Errors
@@ -135,10 +118,10 @@ unwordsList = unwords . map (\(AnyExpr e) -> show e)
 --makeFunc varargs env params body = return $ TFunc (Func params varargs body env)
 makeFunc = undefined
 
-makeNormalFunc :: Env -> [Expr Symbol] -> [AnyExpr] -> IOThrowsError TVal
+makeNormalFunc :: TEnv -> [Expr Symbol] -> [AnyExpr] -> IOThrowsError TVal
 makeNormalFunc = makeFunc Nothing
 
-makeVarargs :: Expr Symbol -> Env -> [Expr Symbol] -> [AnyExpr] -> IOThrowsError TVal
+makeVarargs :: Expr Symbol -> TEnv -> [Expr Symbol] -> [AnyExpr] -> IOThrowsError TVal
 makeVarargs = makeFunc . Just
 
 -- Fexpr constructor
@@ -148,16 +131,15 @@ makeVarargs = makeFunc . Just
 -- Continuations
 
 data Cont = EndCont
-          | PredCont AnyExpr AnyExpr Env Cont
-          -- | TestCont AnyExpr AnyExpr Env Cont
-          | SetCont String Env Cont
-          | DefineCont String Env Cont
+          | PredCont AnyExpr AnyExpr TEnv TVal Cont
+          | SetCont String TEnv Cont
+          | DefineCont String TEnv Cont
           -- Function application
-          | ApplyCont [AnyExpr] [TVal] Env Cont
-          | SeqCont [AnyExpr] [TVal] Env Cont
-          | BindApplyCont [AnyExpr] [TVal] TVal Env Cont
-          | SeqLastCont [AnyExpr] Env Cont
-          | EvalCont Env Cont
+          | ApplyCont [AnyExpr] [TVal] TEnv Cont
+          | SeqCont [AnyExpr] [TVal] TEnv Cont
+          | BindApplyCont [AnyExpr] [TVal] TVal TEnv Cont
+          | SeqLastCont [AnyExpr] TEnv Cont
+          | EvalCont TEnv Cont
 
 
 -- Show instances ------------------------------------------------------------------
@@ -196,16 +178,11 @@ instance Show TError where
 instance Show TVal where
     show (Char c) = "#\\" ++ [c]
     show (String s) = s
-    show (TSymbol s) = s
     show (Int i) = show i
     show (Float f) = show f
     show TFunc{} = "<Function>"
-    --show PrimFunc{} = "<Function>"
-    --show PrimFexpr{} = "<Fexpr>"
-    --show TFexpr{} = "<Fexpr>"
     show (TList l) = show l
     show (Bool b) = show b
     show Continuation{} = "<Continuation>"
     show Syntax{} = "<Syntax>"
-    show Env{} = "<Env>"
-    show Nil = "Nil"
+    show Unit = "Unit"

@@ -17,28 +17,27 @@ import Control.Monad.Error
 import Parser
 import Text.ParserCombinators.Parsec
 
+type TypedEnv = Env TType
+
 class Typed e where
     typeOf :: TypedEnv -> e -> IOTypeError TType
 
 instance Typed TVal where
     typeOf _ Char{} = return CharTy
     typeOf _ String{} = return StringTy
-    typeOf _ TSymbol{} = return SymbolTy
     typeOf _ Int{} = return IntTy
     typeOf _ Float{} = return FloatTy
     typeOf _ (TFunc Func{params,ret}) =
         return $ FuncTy (map (\((Symbol s),ty) -> (s, ty)) params) ret
-    typeOf _ (TFunc PrimFunc{primFParams=params,primtFRet=ret}) =
+    typeOf _ (TFunc PrimFunc{primFParams=params,primFRet=ret}) =
         return $ FuncTy (map (\((Symbol s),ty) -> (s, ty)) params) ret
     typeOf _ TList{} = return LstTy
     typeOf _ Bool{} = return BoolTy
     typeOf _ Continuation{} = return ContTy
     typeOf _ Syntax{} = return StxType
-    typeOf _ Env{} = return EnvTy
-    typeOf _ Nil{} = return NilTy
+    typeOf _ Unit{} = return UnitTy
 
 type TypeError = String
-
 type IOTypeError = ErrorT TypeError IO
 
 newTypedEnv :: IO TypedEnv
@@ -88,22 +87,7 @@ instance Typed AnyExpr where
           thenty <- typeOf env thenE
           elsety <- typeOf env elseE
           if thenty == elsety then return thenty else throwError "then and else expression are not same type"
-  typeOf _ (AnyExpr (Val tval)) = return $ case tval of
-      Char{} -> CharTy
-      String{} -> StringTy
-      TSymbol{} -> SymbolTy
-      Int{} -> IntTy
-      Float{} -> FloatTy
-      (TFunc Func{params,ret}) ->
-          FuncTy (map (\((Symbol s),ty) -> (s, ty)) params) ret
-      (TFunc PrimFunc{primFParams=params,primtFRet=ret}) ->
-          FuncTy (map (\((Symbol s),ty) -> (s, ty)) params) ret
-      TList{} -> LstTy
-      Bool{} -> BoolTy
-      Continuation{} -> ContTy
-      Syntax{} -> StxType
-      Env{} -> EnvTy
-      Nil{} -> NilTy
+  typeOf env (AnyExpr (Val tval)) = typeOf env tval
   typeOf _ expr = throwError $ "not yet implemented: " ++ show expr
 
 instance Typed (Expr a) where
@@ -120,7 +104,7 @@ main :: IO ()
 main = do
     let expr = parse parseAnyExpr "tc test" "(lambda (x : int) (+ y 1))"
     env <- newTypedEnv
-    addGlobalBinding env ("y", BoolTy)
+    addGlobalBinding env ("y", IntTy)
     case expr of
         Left err -> putStrLn (show err)
         Right e -> do
