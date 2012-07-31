@@ -31,7 +31,7 @@ data Set
 
 data Expr a where
     Symbol :: String -> Expr Symbol
-    Lambda :: [(Expr Symbol, TType)] -> [AnyExpr] -> Expr Lambda
+    Lambda :: [(Expr Symbol, TType)] -> TType -> [AnyExpr] -> Expr Lambda
     Application :: AnyExpr -> [AnyExpr] -> Expr Application
     If :: AnyExpr -> AnyExpr -> AnyExpr -> Expr If
     Fexpr :: [(Expr Symbol, TType)] -> [AnyExpr] -> Expr Fexpr
@@ -56,7 +56,7 @@ instance Show AnyExpr where
     show (AnyExpr a) = show a
 
 data TType = CharTy | StringTy | IntTy | FloatTy | FuncTy [(String, TType)] TType
-    | LstTy | BoolTy | ContTy | StxType | UnitTy
+    | LstTy TType | BoolTy | ContTy | StxType | UnitTy
   deriving (Show, Eq)
 
 data TFunc = Func { params :: [(Expr Symbol, TType)]
@@ -146,9 +146,7 @@ data Cont = EndCont
 
 instance Show (Expr a) where
     show (Symbol str) = str
-    show (Lambda params body) = "(lambda (" ++ unwords (map show params) ++ ") " ++ unwords (map show body) ++ ")"
-    --show (Application (Left fun) params) = "(" ++ show fun ++ " " ++ unwords (map show params) ++ ")"
-    --show (Application (Right lambda) params) = "(" ++ show lambda ++ " " ++ unwords (map show params) ++ ")"
+    show (Lambda params ret body) = "(lambda (" ++ unwords (map show params) ++ ") : " ++ show ret ++ " " ++ unwords (map show body) ++ ")"
     show (Application f params) = "(" ++ show f ++ " " ++ unwords (map show params) ++ ")"
     show (If ifE thenE elseE) = "(" ++ intercalate "," [show ifE, show thenE, show elseE] ++ ")"
     show (Fexpr params body) = "(fexpr (" ++ unwords (map show params) ++ ") " ++ unwords (map show body) ++ ")"
