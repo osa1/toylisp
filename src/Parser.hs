@@ -110,9 +110,11 @@ parseLambda = do
     spChar '('
     spString "lambda"
     args <- parseArgList
+    spChar ':'
+    ret <- parseTypeName
     body <- many1 parseAnyExpr
     spChar ')'
-    return $ Lambda args body
+    return $ Lambda args ret body
 
 parseLambdaOrFun :: Parser (Either (Expr Symbol) (Expr Lambda))
 parseLambdaOrFun = liftM Right parseLambda <|> liftM Left parseSymbol
@@ -203,10 +205,11 @@ parseDefun = do
   spString "defun"
   name <- parseSymbol
   params <- parseArgList
+  spChar ':'
+  ret <- parseTypeName
   body <- many1 parseAnyExpr
   spChar ')'
-  return $ Define name (AnyExpr $ Lambda params body)
-
+  return $ Define name (AnyExpr $ Lambda params ret body)
 
 parseSet :: Parser (Expr Set)
 parseSet = do
