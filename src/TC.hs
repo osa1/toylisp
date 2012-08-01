@@ -71,12 +71,40 @@ checkSeq env exprs = sequence $ map (typeOf env) exprs
 unpackSymbol :: Expr Symbol -> String
 unpackSymbol (Symbol s) = s
 
+collectDefTypes :: TypedEnv -> [AnyExpr] -> IOTypeError ()
+collectDefTypes env (def@(AnyExpr (Define name _)):defs) = do
+    ty <- typeOf env def
+    liftIO $ addGlobalBinding env (unpackSymbol name, ty)
+    collectDefTypes env defs
+collectDefTypes env (_:defs) = collectDefTypes env defs
+collectDefTypes _ [] = return ()
+
+checkExprs :: TypedEnv -> [AnyExpr] -> IOTypeError ()
+checkExprs env@(global,_) ((AnyExpr (Define name def)):defs) = do
+    genv <- liftIO $ readIORef global
+    let ty = M.lookup (unpackSymbol name) genv
+    case ty of
+        Nothing -> throwError $ "name is not in global env: " ++ (unpackSymbol name)
+        Just ty' -> do
+            ty'' <- typeOf env def
+            liftIO $ putStrLn $ "type in glob env: " ++ show ty'
+            liftIO $ putStrLn $ "checked type: " ++ show ty''
+            if ty' == ty'' then do
+                liftIO $ putStrLn "ok"
+                checkExprs env defs
+            else throwError $ "type error: " ++ unpackSymbol name
+checkExprs env (expr:exprs) = do
+    typeOf env expr
+    checkExprs env exprs
+checkExprs _ [] = return ()
+
 instance Typed AnyExpr where
   typeOf env (AnyExpr (Symbol s)) = TC.lookup env s
   typeOf env (AnyExpr (Lambda params ret body)) = do
-      let env' = addLocalBindings env (map (\((Symbol s), ty) -> (s, ty)) params)
-      r <- liftM last $ checkSeq env' body
-      if r == ret then return r else throwError "type mismatch on function return value"
+      let pts = map (\(s,t) -> (unpackSymbol s, t)) params
+      let env' = addLocalBindings env pts
+      ret' <- liftM last $ checkSeq env' body
+      if ret' == ret then return (FuncTy pts ret')  else throwError "type mismatch on function return value"
   typeOf env (AnyExpr (Application x xs)) = do
       ft <- typeOf env x
       case ft of
@@ -111,15 +139,30 @@ instance Typed (Expr a) where
 
 -- tests -----------------------------------------------
 
-runTC :: IOTypeError TType -> IO (Either TypeError TType)
-runTC action = do
-    r <- runErrorT action
-    return r
+runTC :: IOTypeError a -> IO (Either TypeError a)
+runTC = runErrorT
 
 main :: IO ()
 main = do
-    {-let expr = parse parseAnyExpr "tc test" "(lambda (x : int) : int (+ y 1))"-}
-    {-let expr = parse parseAnyExpr "tc test" "(defun x (a : int b : bool) : bool (+ 1 2))"-}
+    let text = "(defun f2 (y : bool x : bool) : int 1)(defun f1 (x : int) : bool 1) "
+    let exprs = parse (many1 parseAnyExpr) "tc test" text
+    env <- newTypedEnv
+    case exprs of
+        Left err -> putStrLn (show err)
+        Right exprs' -> do
+            runTC $ collectDefTypes env exprs'
+            let (genv, _) = env
+            globals <- readIORef genv
+            putStrLn $ show (M.toList globals)
+            r <- runTC $ checkExprs env exprs'
+            case r of
+                Left err -> putStrLn $ show err
+                Right _ -> putStrLn "type check OK"
+
+{-main :: IO ()
+main = do
+    [>let expr = parse parseAnyExpr "tc test" "(lambda (x : int) : int (+ y 1))"<]
+    [>let expr = parse parseAnyExpr "tc test" "(defun x (a : int b : bool) : bool (+ 1 2))"<]
     let expr = parse parseAnyExpr "tc test" "(lambda (a : int b : bool) : bool (+ 1 2))"
     env <- newTypedEnv
     addGlobalBinding env ("y", IntTy)
@@ -128,12 +171,4 @@ main = do
         Right e -> do
           r <- runTC $ typeOf env e
           putStrLn $ show r
-          return ()
-
-
-
-
-
-
-
-
+          return ()-}
