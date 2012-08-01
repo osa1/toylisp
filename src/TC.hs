@@ -72,19 +72,19 @@ unpackSymbol :: Expr Symbol -> String
 unpackSymbol (Symbol s) = s
 
 collectDefTypes :: TypedEnv -> [AnyExpr] -> IOTypeError ()
-collectDefTypes env (def@(AnyExpr (Define name _)):defs) = do
+collectDefTypes env (def@(AnyExpr (Define (Symbol name) _)):defs) = do
     ty <- typeOf env def
-    liftIO $ addGlobalBinding env (unpackSymbol name, ty)
+    liftIO $ addGlobalBinding env (name, ty)
     collectDefTypes env defs
 collectDefTypes env (_:defs) = collectDefTypes env defs
 collectDefTypes _ [] = return ()
 
 checkExprs :: TypedEnv -> [AnyExpr] -> IOTypeError ()
-checkExprs env@(global,_) ((AnyExpr (Define name def)):defs) = do
+checkExprs env@(global,_) ((AnyExpr (Define (Symbol name) def)):defs) = do
     genv <- liftIO $ readIORef global
-    let ty = M.lookup (unpackSymbol name) genv
+    let ty = M.lookup name genv
     case ty of
-        Nothing -> throwError $ "name is not in global env: " ++ (unpackSymbol name)
+        Nothing -> throwError $ "name is not in global env: " ++ name
         Just ty' -> do
             ty'' <- typeOf env def
             liftIO $ putStrLn $ "type in glob env: " ++ show ty'
@@ -92,7 +92,7 @@ checkExprs env@(global,_) ((AnyExpr (Define name def)):defs) = do
             if ty' == ty'' then do
                 liftIO $ putStrLn "ok"
                 checkExprs env defs
-            else throwError $ "type error: " ++ unpackSymbol name
+            else throwError $ "type error: " ++ name
 checkExprs env (expr:exprs) = do
     typeOf env expr
     checkExprs env exprs
@@ -121,16 +121,16 @@ instance Typed AnyExpr where
           elsety <- typeOf env elseE
           if thenty == elsety then return thenty else throwError "then and else expression are not same type"
   typeOf env (AnyExpr (Val tval)) = typeOf env tval
-  typeOf env (AnyExpr (Define name (AnyExpr (Lambda params ret _)))) = do
+  typeOf env (AnyExpr (Define (Symbol name) (AnyExpr (Lambda params ret _)))) = do
       -- XXX: this part is strange, it doesn't really type check. it just returns declared
       -- type of the function. The point of this is to collect type signatures before
       -- moving to type-checking.
       let ty = FuncTy (map (\(s, t) -> (unpackSymbol s, t)) params) ret
-      liftIO $ addGlobalBinding env (unpackSymbol name, ty)
+      liftIO $ addGlobalBinding env (name, ty)
       return ty
-  typeOf env (AnyExpr (Define name body)) = do
+  typeOf env (AnyExpr (Define (Symbol name) body)) = do
       ty <- typeOf env body
-      liftIO $ addGlobalBinding env (unpackSymbol name, ty)
+      liftIO $ addGlobalBinding env (name, ty)
       return ty
   typeOf _ expr = throwError $ "not yet implemented: " ++ show expr
 
