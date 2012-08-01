@@ -11,7 +11,6 @@ import Prelude
 import Types
 import qualified Data.Map as M
 import Data.IORef (readIORef, modifyIORef, newIORef)
---import Control.Monad (liftM, liftM2)
 import Control.Monad.Error
 
 import Parser
@@ -31,7 +30,9 @@ instance Typed TVal where
         return $ FuncTy (map (\((Symbol s),ty) -> (s, ty)) params) ret
     typeOf _ (TFunc PrimFunc{primFParams=params,primFRet=ret}) =
         return $ FuncTy (map (\((Symbol s),ty) -> (s, ty)) params) ret
-    typeOf _ TList{} = return LstTy
+    typeOf env (TList vals) = do
+        e <- typeOf env (head vals)
+        return $ LstTy e
     typeOf _ Bool{} = return BoolTy
     typeOf _ Continuation{} = return ContTy
     typeOf _ Syntax{} = return StxType
@@ -67,11 +68,15 @@ addGlobalBinding (global,_) (name,ty) =
 checkSeq :: Typed a => TypedEnv -> [a] -> ErrorT TypeError IO [TType]
 checkSeq env exprs = sequence $ map (typeOf env) exprs
 
+unpackSymbol :: Expr Symbol -> String
+unpackSymbol (Symbol s) = s
+
 instance Typed AnyExpr where
   typeOf env (AnyExpr (Symbol s)) = TC.lookup env s
-  typeOf env (AnyExpr (Lambda params body)) = do
+  typeOf env (AnyExpr (Lambda params ret body)) = do
       let env' = addLocalBindings env (map (\((Symbol s), ty) -> (s, ty)) params)
-      liftM last $ checkSeq env' body
+      r <- liftM last $ checkSeq env' body
+      if r == ret then return r else throwError "type mismatch on function return value"
   typeOf env (AnyExpr (Application x xs)) = do
       ft <- typeOf env x
       case ft of
@@ -88,6 +93,17 @@ instance Typed AnyExpr where
           elsety <- typeOf env elseE
           if thenty == elsety then return thenty else throwError "then and else expression are not same type"
   typeOf env (AnyExpr (Val tval)) = typeOf env tval
+  typeOf env (AnyExpr (Define name (AnyExpr (Lambda params ret _)))) = do
+      -- XXX: this part is strange, it doesn't really type check. it just returns declared
+      -- type of the function. The point of this is to collect type signatures before
+      -- moving to type-checking.
+      let ty = FuncTy (map (\(s, t) -> (unpackSymbol s, t)) params) ret
+      liftIO $ addGlobalBinding env (unpackSymbol name, ty)
+      return ty
+  typeOf env (AnyExpr (Define name body)) = do
+      ty <- typeOf env body
+      liftIO $ addGlobalBinding env (unpackSymbol name, ty)
+      return ty
   typeOf _ expr = throwError $ "not yet implemented: " ++ show expr
 
 instance Typed (Expr a) where
@@ -102,7 +118,9 @@ runTC action = do
 
 main :: IO ()
 main = do
-    let expr = parse parseAnyExpr "tc test" "(lambda (x : int) (+ y 1))"
+    {-let expr = parse parseAnyExpr "tc test" "(lambda (x : int) : int (+ y 1))"-}
+    {-let expr = parse parseAnyExpr "tc test" "(defun x (a : int b : bool) : bool (+ 1 2))"-}
+    let expr = parse parseAnyExpr "tc test" "(lambda (a : int b : bool) : bool (+ 1 2))"
     env <- newTypedEnv
     addGlobalBinding env ("y", IntTy)
     case expr of
