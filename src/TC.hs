@@ -7,8 +7,8 @@
 
 module TC where
 
-import Prelude
 import Types
+import Env
 import qualified Data.Map as M
 import Control.Monad.Error
 
@@ -43,23 +43,6 @@ type IOTypeError = ErrorT TypeError IO
 newTypedEnv :: TypedEnv
 newTypedEnv = (M.fromList [("+", FuncTy [("i1", IntTy), ("i2", IntTy)] IntTy)], [])
 
-lookup :: TypedEnv -> String -> IOTypeError TType
-lookup (globenv, scope) s = do
-    case M.lookup s globenv of
-        Just t -> return t
-        Nothing -> searchScope scope s
-  where searchScope :: [[(String, TType)]] -> String -> IOTypeError TType
-        searchScope [] _ = throwError $ "unbound var " ++ s
-        searchScope (x:xs) name = case Prelude.lookup name x of
-                                      Nothing -> searchScope xs name
-                                      Just t -> return t
-
-addLocalBindings :: TypedEnv -> [(String, TType)] -> TypedEnv
-addLocalBindings (global,scope) bindings = (global, bindings:scope)
-
-addGlobalBinding :: TypedEnv -> (String, TType) -> TypedEnv
-addGlobalBinding (global,scope) (name,ty) = (M.insert name ty global, scope)
-
 checkSeq :: Typed a => TypedEnv -> [a] -> ErrorT TypeError IO [TType]
 checkSeq env exprs = sequence $ map (typeOf env) exprs
 
@@ -92,7 +75,9 @@ checkExprs env (expr:exprs) = do
 checkExprs _ [] = return ()
 
 instance Typed AnyExpr where
-  typeOf env (AnyExpr (Symbol s)) = TC.lookup env s
+  typeOf env (AnyExpr (Symbol s)) = case Env.lookup env s of
+      Nothing -> throwError $ "unbound var " ++ s
+      Just t -> return t
   typeOf env (AnyExpr (Lambda params ret body)) = do
       let pts = map (\(s,t) -> (unpackSymbol s, t)) params
       let env' = addLocalBindings env pts

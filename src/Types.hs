@@ -8,11 +8,9 @@ module Types where
 
 import Control.Monad.Error (Error(..), runErrorT, ErrorT(..))
 import Text.ParserCombinators.Parsec (ParseError)
-import Data.IORef (IORef, newIORef)
 import Data.List (intercalate)
 import qualified Data.Map as M
 
---type Env a = (IORef (M.Map String a), [[(String, IORef a)]])
 type Env a = (M.Map String a, [[(String, a)]])
 type Binding = (TVal, TType)
 type TEnv = Env Binding

@@ -3,46 +3,45 @@ module Env where
 
 import Types
 
-import Data.IORef (writeIORef, readIORef, newIORef)
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad (liftM)
 import Control.Monad.Error (throwError)
+import Data.IORef (IORef, modifyIORef, newIORef)
+import qualified Data.List as L
+import qualified Data.Map as M
 
-isBound :: Env -> String -> IO Bool
-isBound envRef var = readIORef envRef >>= return . maybe False (const True) . lookup var
+getVar :: Env a -> String -> IOThrowsError a
+getVar env var = case Env.lookup env var of
+    Just v -> return v
+    Nothing -> throwError $ UnboundVar "Getting an unbound variable" var
 
-getVar :: Env -> String -> IOThrowsError TVal
-getVar envRef var = do
-    env <- liftIO $ readIORef envRef
-    case lookup var env of
-        Just v  -> liftIO $ readIORef v
-        Nothing -> throwError $ UnboundVar "Getting an unbound variable" var
+lookup :: Env a -> String -> Maybe a
+lookup (globenv, scope) s =
+    case searchScope scope s of
+        Just t -> return t
+        Nothing -> M.lookup s globenv
+  where searchScope :: [[(String, a)]] -> String -> Maybe a
+        searchScope [] _ = Nothing
+        searchScope (x:xs) name = case L.lookup name x of
+                                      Nothing -> searchScope xs name
+                                      Just t -> return t
 
-setVar :: Env -> String -> TVal -> IOThrowsError TVal
-setVar envRef var val = do
-    env <- liftIO $ readIORef envRef
-    case lookup var env of
-        Just v  -> liftIO $ writeIORef v val
+addLocalBindings :: Env a -> [(String, a)] -> Env a
+addLocalBindings (global,scope) bindings = (global, bindings:scope)
+
+addGlobalBinding :: Env a -> (String, a) -> Env a
+addGlobalBinding (global,scope) (name,ty) = (M.insert name ty global, scope)
+
+setVar :: Env (IORef a) -> String -> a -> IOThrowsError (IORef a)
+setVar env var val = do
+    case Env.lookup env var of
+        Just ref -> liftIO (modifyIORef ref (const val)) >> return ref
         Nothing -> throwError $ UnboundVar "Setting an unbound variable." var
-    return val
 
-defineVar :: Env -> String -> TVal -> IOThrowsError TVal
-defineVar envRef var val = do
-    alreadyDefined <- liftIO $ isBound envRef var
-    if alreadyDefined
-        then setVar envRef var val >> return val
-        else liftIO $ do
+defineVar :: Env (IORef a) -> String -> a -> IOThrowsError (Env (IORef a))
+defineVar env var val = do
+    case Env.lookup env var of
+        Just ref -> liftIO $ modifyIORef ref (const val) >> return env
+        Nothing -> liftIO $ do
             valRef <- newIORef val
-            env <- readIORef envRef
-            writeIORef envRef ((var, valRef):env)
-            return val
+            return $ addGlobalBinding env (var, valRef)
 
-bindVars :: Env -> [(String, TVal)] -> IO Env
-bindVars envRef bindings = do
-    env <- readIORef envRef
-    extEnv <- extendEnv bindings env
-    newIORef extEnv
-  where extendEnv bindings env = liftM (++ env) (mapM addBinding bindings)
-        addBinding (var, val) = do
-            ref <- newIORef val
-            return (var, ref)
