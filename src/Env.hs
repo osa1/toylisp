@@ -9,6 +9,9 @@ import Data.IORef (IORef, modifyIORef, newIORef)
 import qualified Data.List as L
 import qualified Data.Map as M
 
+newEnv :: [(String, a)] -> Env a
+newEnv bindings = (M.fromList bindings, [])
+
 getVar :: Env a -> String -> IOThrowsError a
 getVar env var = case Env.lookup env var of
     Just v -> return v

@@ -27,8 +27,7 @@ instance Typed TVal where
     typeOf _ Float{} = return FloatTy
     typeOf _ (TFunc Func{params,ret}) =
         return $ FuncTy (map (\((Symbol s),ty) -> (s, ty)) params) ret
-    typeOf _ (TFunc PrimFunc{primFParams=params,primFRet=ret}) =
-        return $ FuncTy (map (\((Symbol s),ty) -> (s, ty)) params) ret
+    typeOf _ (TFunc PrimFunc{ty}) = return ty
     typeOf env (TList vals) = do
         e <- typeOf env (head vals)
         return $ LstTy e
@@ -41,7 +40,7 @@ type TypeError = String
 type IOTypeError = ErrorT TypeError IO
 
 newTypedEnv :: TypedEnv
-newTypedEnv = (M.fromList [("+", FuncTy [("i1", IntTy), ("i2", IntTy)] IntTy)], [])
+newTypedEnv = newEnv [("+", FuncTy [("i1", IntTy), ("i2", IntTy)] IntTy)]
 
 checkSeq :: Typed a => TypedEnv -> [a] -> ErrorT TypeError IO [TType]
 checkSeq env exprs = sequence $ map (typeOf env) exprs

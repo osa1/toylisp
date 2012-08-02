@@ -41,7 +41,6 @@ data Expr a where
     Define :: Expr Symbol -> AnyExpr -> Expr Define
     Set :: Expr Symbol -> AnyExpr -> Expr Set
 
-type PrimFunc = [TVal] -> IOThrowsError TVal
 type TFexpr = TVal -> [TVal] -> Cont -> IOThrowsError TVal
 type PrimFexpr = TVal -> [TVal] -> Cont -> IOThrowsError TVal
 type TMacro = Expr List -> Expr List
@@ -63,8 +62,7 @@ data TFunc = Func { params :: [(Expr Symbol, TType)]
                   , ret :: TType
                   }
            | PrimFunc { primF :: ([TVal] -> IOThrowsError TVal)
-                      , primFParams :: [(Expr Symbol, TType)]
-                      , primFRet :: TType
+                      , ty :: TType
                       }
 
 data TVal = Char Char
