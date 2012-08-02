@@ -12,9 +12,8 @@ import Data.IORef (IORef, newIORef)
 import Data.List (intercalate)
 import qualified Data.Map as M
 
-type GlobalEnv a = IORef (M.Map String a)
-type Env a = ((GlobalEnv a), [[(String, a)]])
---data Env a = Env (GlobalEnv a) [[(String, a)]]
+--type Env a = (IORef (M.Map String a), [[(String, IORef a)]])
+type Env a = (M.Map String a, [[(String, a)]])
 type Binding = (TVal, TType)
 type TEnv = Env Binding
 

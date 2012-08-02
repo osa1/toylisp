@@ -10,7 +10,6 @@ module TC where
 import Prelude
 import Types
 import qualified Data.Map as M
-import Data.IORef (readIORef, modifyIORef, newIORef)
 import Control.Monad.Error
 
 import Parser
@@ -41,14 +40,11 @@ instance Typed TVal where
 type TypeError = String
 type IOTypeError = ErrorT TypeError IO
 
-newTypedEnv :: IO TypedEnv
-newTypedEnv = do
-    env <- newIORef $ M.fromList [("+", FuncTy [("i1", IntTy), ("i2", IntTy)] IntTy)]
-    return (env, [])
+newTypedEnv :: TypedEnv
+newTypedEnv = (M.fromList [("+", FuncTy [("i1", IntTy), ("i2", IntTy)] IntTy)], [])
 
 lookup :: TypedEnv -> String -> IOTypeError TType
-lookup (globalenv, scope) s = do
-    globenv <- liftIO $ readIORef globalenv
+lookup (globenv, scope) s = do
     case M.lookup s globenv of
         Just t -> return t
         Nothing -> searchScope scope s
@@ -61,9 +57,8 @@ lookup (globalenv, scope) s = do
 addLocalBindings :: TypedEnv -> [(String, TType)] -> TypedEnv
 addLocalBindings (global,scope) bindings = (global, bindings:scope)
 
-addGlobalBinding :: TypedEnv -> (String, TType) -> IO ()
-addGlobalBinding (global,_) (name,ty) =
-    modifyIORef global $ \env -> M.insert name ty env
+addGlobalBinding :: TypedEnv -> (String, TType) -> TypedEnv
+addGlobalBinding (global,scope) (name,ty) = (M.insert name ty global, scope)
 
 checkSeq :: Typed a => TypedEnv -> [a] -> ErrorT TypeError IO [TType]
 checkSeq env exprs = sequence $ map (typeOf env) exprs
@@ -71,17 +66,15 @@ checkSeq env exprs = sequence $ map (typeOf env) exprs
 unpackSymbol :: Expr Symbol -> String
 unpackSymbol (Symbol s) = s
 
-collectDefTypes :: TypedEnv -> [AnyExpr] -> IOTypeError ()
+collectDefTypes :: TypedEnv -> [AnyExpr] -> IOTypeError TypedEnv
 collectDefTypes env (def@(AnyExpr (Define (Symbol name) _)):defs) = do
     ty <- typeOf env def
-    liftIO $ addGlobalBinding env (name, ty)
-    collectDefTypes env defs
+    collectDefTypes (addGlobalBinding env (name,ty)) defs
 collectDefTypes env (_:defs) = collectDefTypes env defs
-collectDefTypes _ [] = return ()
+collectDefTypes env [] = return env
 
 checkExprs :: TypedEnv -> [AnyExpr] -> IOTypeError ()
-checkExprs env@(global,_) ((AnyExpr (Define (Symbol name) def)):defs) = do
-    genv <- liftIO $ readIORef global
+checkExprs env@(genv,_) ((AnyExpr (Define (Symbol name) def)):defs) = do
     let ty = M.lookup name genv
     case ty of
         Nothing -> throwError $ "name is not in global env: " ++ name
@@ -121,17 +114,12 @@ instance Typed AnyExpr where
           elsety <- typeOf env elseE
           if thenty == elsety then return thenty else throwError "then and else expression are not same type"
   typeOf env (AnyExpr (Val tval)) = typeOf env tval
-  typeOf env (AnyExpr (Define (Symbol name) (AnyExpr (Lambda params ret _)))) = do
+  typeOf _ (AnyExpr (Define _ (AnyExpr (Lambda params ret _)))) =
       -- XXX: this part is strange, it doesn't really type check. it just returns declared
       -- type of the function. The point of this is to collect type signatures before
       -- moving to type-checking.
-      let ty = FuncTy (map (\(s, t) -> (unpackSymbol s, t)) params) ret
-      liftIO $ addGlobalBinding env (name, ty)
-      return ty
-  typeOf env (AnyExpr (Define (Symbol name) body)) = do
-      ty <- typeOf env body
-      liftIO $ addGlobalBinding env (name, ty)
-      return ty
+      return $ FuncTy (map (\(s, t) -> (unpackSymbol s, t)) params) ret
+  typeOf env (AnyExpr (Define _ body)) = typeOf env body
   typeOf _ expr = throwError $ "not yet implemented: " ++ show expr
 
 instance Typed (Expr a) where
@@ -144,31 +132,19 @@ runTC = runErrorT
 
 main :: IO ()
 main = do
-    let text = "(defun f2 (y : bool x : bool) : int 1)(defun f1 (x : int) : bool 1) "
+    --let text = "(defun f2 (y : bool x : bool) : int 1)(defun f1 (x : int) : bool #t) "
+    --let text = "((lambda (x : int) : int ((lambda (x : bool) : int 10) #f)) 10)"
+    let text = "(defun f2 () : int (f1)) (defun f1 () : int (f2))"
     let exprs = parse (many1 parseAnyExpr) "tc test" text
-    env <- newTypedEnv
+    let env = newTypedEnv
     case exprs of
         Left err -> putStrLn (show err)
         Right exprs' -> do
-            runTC $ collectDefTypes env exprs'
-            let (genv, _) = env
-            globals <- readIORef genv
-            putStrLn $ show (M.toList globals)
-            r <- runTC $ checkExprs env exprs'
-            case r of
+            env' <- runTC $ collectDefTypes env exprs'
+            case env' of
                 Left err -> putStrLn $ show err
-                Right _ -> putStrLn "type check OK"
-
-{-main :: IO ()
-main = do
-    [>let expr = parse parseAnyExpr "tc test" "(lambda (x : int) : int (+ y 1))"<]
-    [>let expr = parse parseAnyExpr "tc test" "(defun x (a : int b : bool) : bool (+ 1 2))"<]
-    let expr = parse parseAnyExpr "tc test" "(lambda (a : int b : bool) : bool (+ 1 2))"
-    env <- newTypedEnv
-    addGlobalBinding env ("y", IntTy)
-    case expr of
-        Left err -> putStrLn (show err)
-        Right e -> do
-          r <- runTC $ typeOf env e
-          putStrLn $ show r
-          return ()-}
+                Right genv -> do
+                  r <- runTC $ checkExprs genv exprs'
+                  case r of
+                      Left err -> putStrLn $ show err
+                      Right _ -> putStrLn "type check OK"
