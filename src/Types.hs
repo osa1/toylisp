@@ -10,10 +10,11 @@ import Control.Monad.Error (Error(..), runErrorT, ErrorT(..))
 import Text.ParserCombinators.Parsec (ParseError)
 import Data.List (intercalate)
 import qualified Data.Map as M
+import Data.IORef (IORef)
 
 type Env a = (M.Map String a, [[(String, a)]])
 type Binding = (TVal, TType)
-type TEnv = Env Binding
+type TEnv = Env (IORef TVal)
 
 data Symbol
 data Lambda
@@ -65,6 +66,9 @@ data TFunc = Func { params :: [(Expr Symbol, TType)]
                       , ty :: TType
                       }
 
+makeNormalFunc :: TEnv -> [(Expr Symbol, TType)] -> [AnyExpr] -> TVal
+makeNormalFunc = undefined
+
 data TVal = Char Char
           | String String
           | Int Int
@@ -107,26 +111,10 @@ extractValue (Left err) = show err
 unwordsList :: [AnyExpr] -> String
 unwordsList = unwords . map (\(AnyExpr e) -> show e)
 
-
--- Function constructors
---makeFunc :: Maybe (Expr Symbol) -> Env -> [Expr Symbol] -> [AnyExpr] -> IOThrowsError TVal
---makeFunc varargs env params body = return $ TFunc (Func params varargs body env)
-makeFunc = undefined
-
-makeNormalFunc :: TEnv -> [Expr Symbol] -> [AnyExpr] -> IOThrowsError TVal
-makeNormalFunc = makeFunc Nothing
-
-makeVarargs :: Expr Symbol -> TEnv -> [Expr Symbol] -> [AnyExpr] -> IOThrowsError TVal
-makeVarargs = makeFunc . Just
-
--- Fexpr constructor
---makeFexpr :: [Expr Symbol] -> [AnyExpr] -> IOThrowsError TVal
---makeFexpr params body = return $ TFexpr params body
-
 -- Continuations
 
 data Cont = EndCont
-          | PredCont AnyExpr AnyExpr TEnv TVal Cont
+          | PredCont AnyExpr AnyExpr TEnv Cont
           | SetCont String TEnv Cont
           | DefineCont String TEnv Cont
           -- Function application
