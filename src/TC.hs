@@ -2,133 +2,179 @@
                 -fno-warn-missing-signatures
                 -fno-warn-hi-shadowing
                 -fno-warn-unused-do-bind
+                -fno-warn-orphans
                 -fno-warn-name-shadowing #-}
-{-# LANGUAGE GADTs, NamedFieldPuns #-}
+{-# LANGUAGE GADTs,
+             NamedFieldPuns #-}
 
 module TC where
 
-import Types
-import Env
+--import Types
+--import Env
+
 import qualified Data.Map as M
 import Control.Monad.Error
+import Control.Monad.State
+--import Control.Monad.Identity
+import Data.Unique
+import Data.List (union, nub)
 
-import Parser
-import Text.ParserCombinators.Parsec
 
-type TypedEnv = Env TType
+--import Parser
+--import Text.ParserCombinators.Parsec
 
-class Typed e where
-    typeOf :: TypedEnv -> e -> IOTypeError TType
-
-instance Typed TVal where
-    typeOf _ Char{} = return CharTy
-    typeOf _ String{} = return StringTy
-    typeOf _ Int{} = return IntTy
-    typeOf _ Float{} = return FloatTy
-    typeOf _ (TFunc Func{params,ret}) =
-        return $ FuncTy (map (\((Symbol s),ty) -> (s, ty)) params) ret
-    typeOf _ (TFunc PrimFunc{ty}) = return ty
-    typeOf env (TList vals) = do
-        e <- typeOf env (head vals)
-        return $ LstTy e
-    typeOf _ Bool{} = return BoolTy
-    typeOf _ Continuation{} = return ContTy
-    typeOf _ Syntax{} = return StxType
-    typeOf _ Unit{} = return UnitTy
 
 type TypeError = String
-type IOTypeError = ErrorT TypeError IO
+--type TyErr = Either TypeError
+type TyErr = ErrorT TypeError IO
 
-newTypedEnv :: TypedEnv
-newTypedEnv = newEnv [("+", FuncTy [("i1", IntTy), ("i2", IntTy)] IntTy)]
+data Kind = Star | KFun Kind Kind | Abs
+    deriving (Show, Eq)
 
-checkSeq :: Typed a => TypedEnv -> [a] -> ErrorT TypeError IO [TType]
-checkSeq env exprs = sequence $ map (typeOf env) exprs
+data Type = TVar TyVar    -- variable
+          | TCon TyCon    -- constant
+          | TAp Type Type -- application
+    deriving (Show, Eq)
 
-unpackSymbol :: Expr Symbol -> String
-unpackSymbol (Symbol s) = s
+type Id = String
 
-collectDefTypes :: TypedEnv -> [AnyExpr] -> IOTypeError TypedEnv
-collectDefTypes env (def@(AnyExpr (Define (Symbol name) _)):defs) = do
-    ty <- typeOf env def
-    collectDefTypes (addGlobalBinding env (name,ty)) defs
-collectDefTypes env (_:defs) = collectDefTypes env defs
-collectDefTypes env [] = return env
+instance Show Unique where
+    show u = "t" ++ show (hashUnique u)
 
-checkExprs :: TypedEnv -> [AnyExpr] -> IOTypeError ()
-checkExprs env@(genv,_) ((AnyExpr (Define (Symbol name) def)):defs) = do
-    let ty = M.lookup name genv
-    case ty of
-        Nothing -> throwError $ "name is not in global env: " ++ name
-        Just ty' -> do
-            ty'' <- typeOf env def
-            liftIO $ putStrLn $ "type in glob env: " ++ show ty'
-            liftIO $ putStrLn $ "checked type: " ++ show ty''
-            if ty' == ty'' then do
-                liftIO $ putStrLn "ok"
-                checkExprs env defs
-            else throwError $ "type error: " ++ name
-checkExprs env (expr:exprs) = do
-    typeOf env expr
-    checkExprs env exprs
-checkExprs _ [] = return ()
+data TyVar = TyVar Id Kind
+    deriving (Show, Eq)
 
-instance Typed AnyExpr where
-  typeOf env (AnyExpr (Symbol s)) = case Env.lookup env s of
-      Nothing -> throwError $ "unbound var " ++ s
-      Just t -> return t
-  typeOf env (AnyExpr (Lambda params ret body)) = do
-      let pts = map (\(s,t) -> (unpackSymbol s, t)) params
-      let env' = addLocalBindings env pts
-      ret' <- liftM last $ checkSeq env' body
-      if ret' == ret then return (FuncTy pts ret')  else throwError "type mismatch on function return value"
-  typeOf env (AnyExpr (Application x xs)) = do
-      ft <- typeOf env x
-      case ft of
-          (FuncTy params ret) -> do
-              ptys <- checkSeq env xs
-              if (map snd params) == ptys then return ret else throwError "type error on parameters"
-          _ -> throwError "Application to a non-function data"
-  typeOf env (AnyExpr (If guard thenE elseE)) = do
-      guardty <- typeOf env guard
-      if guardty /= BoolTy then
-          throwError "Guard is not boolean type"
-      else do
-          thenty <- typeOf env thenE
-          elsety <- typeOf env elseE
-          if thenty == elsety then return thenty else throwError "then and else expression are not same type"
-  typeOf env (AnyExpr (Val tval)) = typeOf env tval
-  typeOf _ (AnyExpr (Define _ (AnyExpr (Lambda params ret _)))) =
-      -- XXX: this part is strange, it doesn't really type check. it just returns declared
-      -- type of the function. The point of this is to collect type signatures before
-      -- moving to type-checking.
-      return $ FuncTy (map (\(s, t) -> (unpackSymbol s, t)) params) ret
-  typeOf env (AnyExpr (Define _ body)) = typeOf env body
-  typeOf _ expr = throwError $ "not yet implemented: " ++ show expr
+newTyVar :: Kind -> IO TyVar
+newTyVar k = liftM (flip TyVar k . show) newUnique
 
-instance Typed (Expr a) where
-    typeOf env expr = typeOf env (AnyExpr expr)
+data TyCon = TyCon Id Kind
+    deriving (Show, Eq)
 
--- tests -----------------------------------------------
+tUnit    = TCon (TyCon "()" Star)
+tChar    = TCon (TyCon "Char" Star)
+tInt     = TCon (TyCon "Int" Star)
+tFloat   = TCon (TyCon "Float" Star)
 
-runTC :: IOTypeError a -> IO (Either TypeError a)
-runTC = runErrorT
+tList    = TCon (TyCon "[]" (KFun Star Star))
+tArrow   = TCon (TyCon "(->)" (KFun Star (KFun Star Star)))
+tTuple2  = TCon (TyCon "(,)" (KFun Star (KFun Star Star)))
 
-main :: IO ()
-main = do
-    --let text = "(defun f2 (y : bool x : bool) : int 1)(defun f1 (x : int) : bool #t) "
-    --let text = "((lambda (x : int) : int ((lambda (x : bool) : int 10) #f)) 10)"
-    let text = "(defun f2 () : int (f1)) (defun f1 () : int (f2))"
-    let exprs = parse (many1 parseAnyExpr) "tc test" text
-    let env = newTypedEnv
-    case exprs of
-        Left err -> putStrLn (show err)
-        Right exprs' -> do
-            env' <- runTC $ collectDefTypes env exprs'
-            case env' of
-                Left err -> putStrLn $ show err
-                Right genv -> do
-                  r <- runTC $ checkExprs genv exprs'
-                  case r of
-                      Left err -> putStrLn $ show err
-                      Right _ -> putStrLn "type check OK"
+class HasKind t where
+    kind :: t -> Kind
+
+instance HasKind TyVar where
+    kind (TyVar _ k) = k
+
+instance HasKind TyCon where
+    kind (TyCon _ k) = k
+
+instance HasKind Type where
+    kind (TVar v) = kind v
+    kind (TCon c) = kind c
+    kind t@(TAp a1 _) =
+        case kind a1 of
+            (KFun _ k) -> k
+            _ -> error $ show a1 ++ " is not KFun: " ++ show t
+
+type Subst = [(Id, Type)]
+
+nullSubst :: Subst
+nullSubst = []
+
+(+->) :: Id -> Type -> Subst
+u +-> t = [(u, t)] -- kind u == kind t
+
+class Types t where
+    apply :: Subst -> t -> t
+    tv    :: t -> [TyVar]
+
+instance Types Type where
+    apply s (TVar (TyVar name k)) = case lookup name s of
+                           Just t -> t
+                           Nothing -> TVar (TyVar name k)
+    apply _ (TCon c)  = TCon c
+    apply s (TAp a b) = TAp (apply s a) (apply s b)
+
+    tv (TVar u)  = [u]
+    tv TCon{}    = []
+    tv (TAp a b) = tv a `union` tv b
+
+instance (Types a) => Types [a] where
+    apply s = map (apply s)
+    tv      = nub . concat . map tv
+
+infixr 4 @@
+(@@) :: Subst -> Subst -> Subst
+s1 @@ s2 = [ (u, apply s1 t) | (u, t) <- s2 ] ++ s1
+
+mgu :: Type -> Type -> TyErr Subst
+mgu (TAp l r) (TAp l' r') = do
+    s1 <- mgu l l'
+    s2 <- mgu (apply s1 r) (apply s1 r')
+    return (s2 @@ s1)
+mgu (TVar u) t = varBind u t
+mgu t (TVar u) = varBind u t
+mgu (TCon tc1) (TCon tc2) | tc1 == tc2 = return nullSubst
+mgu t1 t2 = throwError $ "types do not unify: " ++ show t1 ++ ", " ++ show t2
+
+varBind :: TyVar -> Type -> TyErr Subst
+varBind u t | t == TVar u      = return nullSubst
+            | u `elem` tv t    = throwError "occurs check fails"
+            | kind u /= kind t = throwError "kinds do not match"
+            | otherwise        = let (TyVar name _) = u in return (name +-> t)
+
+data Expr = Var Id
+          | Lit Literal
+          | Ap Expr Expr 
+          -- | Let Bindings Expr
+    deriving Show
+
+data Literal = LitInt Integer
+             | LitChar Char
+             | LitStr String
+    deriving Show
+
+type TyEnv = [(String, Type)]
+type NonGenerics = [String]
+
+unify :: Subst -> Type -> Type -> TyErr Type
+unify subst t1 t2 = do
+    subst' <- mgu (apply subst t1) (apply subst t2)
+    return $ apply subst' t1
+
+freshType :: NonGenerics -> Type -> IO Type
+freshType nongen t@(TVar (TyVar name k)) =
+    if name `elem` nongen
+        then return t
+        else do new <- newTyVar k
+                return $ TVar new
+freshType nongen (TAp t1 t2) = do
+    t1' <- freshType nongen t1
+    t2' <- freshType nongen t2
+    return (TAp t1' t2')
+freshType _ t = return t
+
+retrieve :: TyEnv -> Subst -> NonGenerics -> Id -> TyErr Type
+retrieve env subst nongen var =
+    case lookup var subst of
+        Nothing -> case lookup var env of
+                       Nothing -> throwError $ "unbound var: " ++ show var
+                       Just t  -> liftIO $ freshType nongen t
+        Just t -> return t
+
+analyzeExp :: TyEnv -> Subst -> NonGenerics -> Expr -> TyErr Type
+analyzeExp env subst nongen (Var name) = retrieve env subst nongen name
+analyzeExp _ _ _ (Lit LitInt{})  = return tInt
+analyzeExp _ _ _ (Lit LitChar{}) = return tChar
+analyzeExp _ _ _ (Lit LitStr{})  = return (TAp tList tChar)
+analyzeExp env subst nongen (Ap e1 e2) = do
+    funty <- analyzeExp env subst nongen e1
+    argty <- analyzeExp env subst nongen e2
+    res <- liftIO $ newTyVar Abs
+    unify subst funty (TAp (TAp tArrow argty) (TVar res))
+
+--main :: IO ()
+--main = do
+    --let exp1 = Ap (Var "a") (Var "a")
+    --ty <- runErrorT $ analyzeExp [] [] [] exp1
+    --putStrLn $ show ty
