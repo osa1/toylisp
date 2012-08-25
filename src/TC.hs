@@ -99,26 +99,6 @@ varBind u t | t == TVar u       = return nullSubst
             | otherwise         = let (TyVar name) = u in return (name +-> t)
 
 
---data Type = TVar TyVar     -- variable
---          | TCon TyCon     -- constant
---          | TArr Type Type -- arrow
---    deriving (Show, Eq)
-
---type Subst = M.Map Id Type
-
-main :: IO ()
-main = do
-    --let env = TyEnv (M.fromList [("test", TArr tFloat tFloat), ("test2", TArr (TVar (TyVar "a")) (TVar (TyVar "a")))])
-    --putStrLn $ show (tv env)
-    --let env' = apply (M.fromList [("a", tInt)]) env
-    --putStrLn $ show (tv env')
-    --ty <- freshType S.empty (TArr (TVar (TyVar "a")) (TVar (TyVar "a")))
-    --putStrLn $ show ty
-    let ty1 = TArr tInt tBool
-    let ty2 = TArr (TVar (TyVar "a")) (TVar (TyVar "b"))
-    r <- runErrorT $ mgu ty1 ty2
-    putStrLn $ show r
-
 data Expr = Var Id
           | Lit Literal
           | Ap Expr Expr
@@ -134,8 +114,7 @@ data Literal = LitInt Integer
              | LitBool Bool
     deriving Show
 
---type TyEnv = M.Map String Type
-newtype TyEnv = TyEnv (M.Map String Type)
+newtype TyEnv = TyEnv (M.Map String Type) deriving Show
 type NonGenerics = S.Set Id
 type CopyEnv = M.Map String Type
 
@@ -164,6 +143,23 @@ retrieve (TyEnv env) nongen name =
       case M.lookup name env of
           Just t -> liftIO $ freshType nongen t
           Nothing -> throwError "unbound var"
+
+
+main :: IO ()
+main = do
+    let env = TyEnv (M.fromList [("test", TArr tFloat tFloat), ("test2", TArr (TVar (TyVar "a")) (TVar (TyVar "a")))])
+    --putStrLn $ show (tv env)
+    --let env' = apply (M.fromList [("a", tInt)]) env
+    --putStrLn $ show (tv env')
+    --ty <- freshType S.empty (TArr (TVar (TyVar "a")) (TVar (TyVar "a")))
+    --putStrLn $ show ty
+    let ty1 = TArr tInt tBool
+    let ty2 = TArr (TVar (TyVar "a")) (TVar (TyVar "b"))
+    r <- runErrorT $ mgu ty1 ty2
+    case r of
+        Right subs -> do
+            putStrLn $ show (apply subs env)
+    putStrLn $ show r
 
 --ti :: TyEnv -> NonGenerics -> Expr -> TyErr (Subst, Type)
 --ti env nongen (Var name) =
