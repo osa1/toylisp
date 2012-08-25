@@ -142,50 +142,49 @@ retrieve :: TyEnv -> NonGenerics -> String -> TyErr Type
 retrieve (TyEnv env) nongen name =
       case M.lookup name env of
           Just t -> liftIO $ freshType nongen t
-          Nothing -> throwError "unbound var"
+          Nothing -> throwError $ "unbound var: " ++ name
 
+ti :: TyEnv -> NonGenerics -> Expr -> TyErr (Subst, Type)
+ti env nongen (Var name) = liftM ((,) nullSubst) (retrieve env nongen name)
+ti _ _ (Lit LitInt{})  = return (nullSubst, tInt)
+ti _ _ (Lit LitChar{}) = return (nullSubst, tChar)
+ti _ _ (Lit LitBool{}) = return (nullSubst, tBool)
+
+ti env nongen (Ap e1 e2) = do
+    (s1, e1ty) <- ti env nongen e1
+    (s2, e2ty) <- ti env nongen e2
+    var <- liftIO newTyVar
+    s <- mgu (TArr e2ty (TVar var)) e1ty
+    return (s @@ s2 @@ s1, apply s (TVar var))
+ti (TyEnv env) nongen (Let (LetBinding name e1) e2) = do
+    var <- liftIO newTyVar
+    let tyenv' = TyEnv (M.insert name (TVar var) env)
+    (s1, t)  <- ti tyenv' nongen e1
+    s1' <- mgu (TVar var) (apply s1 t)
+    (s2, t2) <- ti (apply s1' tyenv') nongen e2
+    return (s2 @@ s1', apply s2 t2)
+ti (TyEnv env) nongen (Let (LambdaBinding name) e) = do
+    var@(TyVar n) <- liftIO newTyVar
+    let tyenv' = TyEnv (M.insert name (TVar var) env)
+    liftIO $ putStrLn $ show tyenv'
+    (s1, t)  <- ti tyenv' (S.insert n nongen) e
+    return (s1, apply s1 (TArr (TVar var) t))
 
 main :: IO ()
 main = do
     let env = TyEnv (M.fromList [("test", TArr tFloat tFloat), ("test2", TArr (TVar (TyVar "a")) (TVar (TyVar "a")))])
-    --putStrLn $ show (tv env)
-    --let env' = apply (M.fromList [("a", tInt)]) env
-    --putStrLn $ show (tv env')
-    --ty <- freshType S.empty (TArr (TVar (TyVar "a")) (TVar (TyVar "a")))
-    --putStrLn $ show ty
-    let ty1 = TArr tInt tBool
-    let ty2 = TArr (TVar (TyVar "a")) (TVar (TyVar "b"))
-    r <- runErrorT $ mgu ty1 ty2
-    case r of
-        Right subs -> do
-            putStrLn $ show (apply subs env)
-    putStrLn $ show r
+    --let exp = Let (LetBinding "id" (Let (LambdaBinding "a") (Var "a")))
+    --              (Ap (Var "id") (Lit (LitInt 10)))
+    let exp = Ap (Let (LambdaBinding "a") (Var "a")) (Lit (LitInt 10))
+    --let exp = Let (LambdaBinding "a") (Var "a")
+    ty <- runErrorT $ ti env S.empty exp
+    putStrLn $ show ty
 
---ti :: TyEnv -> NonGenerics -> Expr -> TyErr (Subst, Type)
---ti env nongen (Var name) =
---    case M.lookup name env of
---        Nothing -> throwError $ "unbound var: " ++ name
---        Just t  -> do
---            fresh <- liftIO $ freshType nongen t
---            return (nullSubst, t)
---ti _ _ (Lit LitInt{})  = return (nullSubst, tInt)
---ti _ _ (Lit LitChar{}) = return (nullSubst, tChar)
---ti _ _ (Lit LitBool{}) = return (nullSubst, tBool)
---ti env nongen (Ap e1 e2) = do
---    (s1, e1ty) <- ti env nongen e1
---    (s2, e2ty) <- ti (apply s1 env) nongen e2
---    var <- liftIO newTyVar
---    s <- mgu (apply s2 e1ty) (TArr e2ty (TVar var))
---    return (s @@ s2 @@ s1, apply s (TVar var))
 
---ti env nongen (Let (LetBinding name e1) e2) = do
---    (s1, t)  <- ti env nongen e1
---    (s2, t2) <- ti (apply s1 (M.insert name t env)) nongen e2
---    return (s2 @@ s1, t2)
+    --putStrLn $ show (apply (M.fromList [("a", tInt)]) exp)
+    --ty <- runErrorT $ ti (TyEnv M.empty) S.empty exp
 
-----ti env nongen (Let (LambdaBinding name) e) = do
---    --var <- liftIO newTyVar
---    --(s, t) <- ti env (S.insert name nongen) e
---    --return (s, TArr (apply s var)
+
+
 
 
