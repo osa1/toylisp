@@ -159,6 +159,12 @@ freshType nongen ty = liftM snd (freshType' nongen M.empty ty)
             return (cenv'', TArr t1' t2')
         freshType' _ cenv t = return (cenv, t)
 
+retrieve :: TyEnv -> NonGenerics -> String -> TyErr Type
+retrieve (TyEnv env) nongen name =
+      case M.lookup name env of
+          Just t -> liftIO $ freshType nongen t
+          Nothing -> throwError "unbound var"
+
 --ti :: TyEnv -> NonGenerics -> Expr -> TyErr (Subst, Type)
 --ti env nongen (Var name) =
 --    case M.lookup name env of
