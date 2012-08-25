@@ -5,7 +5,9 @@
                 -fno-warn-orphans
                 -fno-warn-name-shadowing #-}
 {-# LANGUAGE GADTs,
-             NamedFieldPuns #-}
+             NamedFieldPuns,
+             TypeSynonymInstances
+             #-}
 
 module TC where
 
@@ -13,102 +15,75 @@ module TC where
 --import Env
 
 import qualified Data.Map as M
+import qualified Data.Set as S
 import Control.Monad.Error
 import Control.Monad.State
 --import Control.Monad.Identity
 import Data.Unique
-import Data.List (union, nub)
-
-
---import Parser
---import Text.ParserCombinators.Parsec
 
 
 type TypeError = String
 --type TyErr = Either TypeError
 type TyErr = ErrorT TypeError IO
 
-data Kind = Star | KFun Kind Kind | Abs
-    deriving (Show, Eq)
-
-data Type = TVar TyVar    -- variable
-          | TCon TyCon    -- constant
-          | TAp Type Type -- application
+data Type = TVar TyVar     -- variable
+          | TCon TyCon     -- constant
+          | TArr Type Type -- arrow
     deriving (Show, Eq)
 
 type Id = String
 
+data TyCon = TyCon Id
+    deriving (Show, Eq)
+
 instance Show Unique where
     show u = "t" ++ show (hashUnique u)
 
-data TyVar = TyVar Id Kind
-    deriving (Show, Eq)
+data TyVar = TyVar Id
+    deriving (Show, Eq, Ord)
 
-newTyVar :: Kind -> IO TyVar
-newTyVar k = liftM (flip TyVar k . show) newUnique
+newTyVar :: IO TyVar
+newTyVar = liftM (TyVar . show) newUnique
 
-data TyCon = TyCon Id Kind
-    deriving (Show, Eq)
+tUnit  = TCon (TyCon "Unit")
+tChar  = TCon (TyCon "Char")
+tInt   = TCon (TyCon "Int")
+tFloat = TCon (TyCon "Float")
+tBool  = TCon (TyCon "Bool")
 
-tUnit    = TCon (TyCon "()" Star)
-tChar    = TCon (TyCon "Char" Star)
-tInt     = TCon (TyCon "Int" Star)
-tFloat   = TCon (TyCon "Float" Star)
-
-tList    = TCon (TyCon "[]" (KFun Star Star))
-tArrow   = TCon (TyCon "(->)" (KFun Star (KFun Star Star)))
-tTuple2  = TCon (TyCon "(,)" (KFun Star (KFun Star Star)))
-
-class HasKind t where
-    kind :: t -> Kind
-
-instance HasKind TyVar where
-    kind (TyVar _ k) = k
-
-instance HasKind TyCon where
-    kind (TyCon _ k) = k
-
-instance HasKind Type where
-    kind (TVar v) = kind v
-    kind (TCon c) = kind c
-    kind t@(TAp a1 _) =
-        case kind a1 of
-            (KFun _ k) -> k
-            _ -> error $ show a1 ++ " is not KFun: " ++ show t
-
-type Subst = [(Id, Type)]
+type Subst = M.Map Id Type
 
 nullSubst :: Subst
-nullSubst = []
+nullSubst = M.empty
 
 (+->) :: Id -> Type -> Subst
-u +-> t = [(u, t)] -- kind u == kind t
+u +-> t = M.singleton u t
 
 class Types t where
     apply :: Subst -> t -> t
-    tv    :: t -> [TyVar]
+    tv    :: t -> S.Set TyVar
 
 instance Types Type where
-    apply s (TVar (TyVar name k)) = case lookup name s of
+    apply s (TVar (TyVar name)) = case M.lookup name s of
                            Just t -> t
-                           Nothing -> TVar (TyVar name k)
+                           Nothing -> TVar (TyVar name)
     apply _ (TCon c)  = TCon c
-    apply s (TAp a b) = TAp (apply s a) (apply s b)
+    apply s (TArr a b) = TArr (apply s a) (apply s b)
 
-    tv (TVar u)  = [u]
-    tv TCon{}    = []
-    tv (TAp a b) = tv a `union` tv b
+    tv (TVar u)  = S.singleton u
+    tv TCon{}    = S.empty
+    tv (TArr a b) = tv a `S.union` tv b
 
 instance (Types a) => Types [a] where
     apply s = map (apply s)
-    tv      = nub . concat . map tv
+    tv      = S.unions . map tv
 
 infixr 4 @@
 (@@) :: Subst -> Subst -> Subst
-s1 @@ s2 = [ (u, apply s1 t) | (u, t) <- s2 ] ++ s1
+s1 @@ s2 = M.map (apply s1) s2 `M.union` s1
 
 mgu :: Type -> Type -> TyErr Subst
-mgu (TAp l r) (TAp l' r') = do
+mgu (TArr l r) (TArr l' r') = do
     s1 <- mgu l l'
     s2 <- mgu (apply s1 r) (apply s1 r')
     return (s2 @@ s1)
@@ -118,63 +93,97 @@ mgu (TCon tc1) (TCon tc2) | tc1 == tc2 = return nullSubst
 mgu t1 t2 = throwError $ "types do not unify: " ++ show t1 ++ ", " ++ show t2
 
 varBind :: TyVar -> Type -> TyErr Subst
-varBind u t | t == TVar u      = return nullSubst
-            | u `elem` tv t    = throwError "occurs check fails"
-            | kind u /= kind t = throwError "kinds do not match"
-            | otherwise        = let (TyVar name _) = u in return (name +-> t)
+varBind u t | t == TVar u       = return nullSubst
+            | u `S.member` tv t = throwError "occurs check fails"
+            -- | kind u /= kind t = throwError "kinds do not match"
+            | otherwise         = let (TyVar name) = u in return (name +-> t)
+
+
+--data Type = TVar TyVar     -- variable
+--          | TCon TyCon     -- constant
+--          | TArr Type Type -- arrow
+--    deriving (Show, Eq)
+
+--type Subst = M.Map Id Type
+
+main :: IO ()
+main = do
+    --let env = TyEnv (M.fromList [("test", TArr tFloat tFloat), ("test2", TArr (TVar (TyVar "a")) (TVar (TyVar "a")))])
+    --putStrLn $ show (tv env)
+    --let env' = apply (M.fromList [("a", tInt)]) env
+    --putStrLn $ show (tv env')
+    --ty <- freshType S.empty (TArr (TVar (TyVar "a")) (TVar (TyVar "a")))
+    --putStrLn $ show ty
+    let ty1 = TArr tInt tBool
+    let ty2 = TArr (TVar (TyVar "a")) (TVar (TyVar "b"))
+    r <- runErrorT $ mgu ty1 ty2
+    putStrLn $ show r
 
 data Expr = Var Id
           | Lit Literal
-          | Ap Expr Expr 
-          -- | Let Bindings Expr
+          | Ap Expr Expr
+          | Let Bindings Expr
+    deriving Show
+
+data Bindings = LetBinding String Expr
+              | LambdaBinding String
     deriving Show
 
 data Literal = LitInt Integer
              | LitChar Char
-             | LitStr String
+             | LitBool Bool
     deriving Show
 
-type TyEnv = [(String, Type)]
-type NonGenerics = [String]
+--type TyEnv = M.Map String Type
+newtype TyEnv = TyEnv (M.Map String Type)
+type NonGenerics = S.Set Id
+type CopyEnv = M.Map String Type
 
-unify :: Subst -> Type -> Type -> TyErr Type
-unify subst t1 t2 = do
-    subst' <- mgu (apply subst t1) (apply subst t2)
-    return $ apply subst' t1
+instance Types TyEnv where
+    apply s (TyEnv t) = TyEnv (M.map (apply s) t)
+    tv (TyEnv t) = S.unions (map tv $ M.elems t)
 
 freshType :: NonGenerics -> Type -> IO Type
-freshType nongen t@(TVar (TyVar name k)) =
-    if name `elem` nongen
-        then return t
-        else do new <- newTyVar k
-                return $ TVar new
-freshType nongen (TAp t1 t2) = do
-    t1' <- freshType nongen t1
-    t2' <- freshType nongen t2
-    return (TAp t1' t2')
-freshType _ t = return t
+freshType nongen ty = liftM snd (freshType' nongen M.empty ty)
+  where freshType' :: NonGenerics -> CopyEnv -> Type -> IO (CopyEnv, Type)
+        freshType' nongen cenv t@(TVar (TyVar name))
+            | name `S.member` nongen = return (cenv, t)
+            | otherwise = case M.lookup name cenv of
+                            Nothing -> do
+                                new <- newTyVar
+                                return $ (M.insert name (TVar new) cenv, TVar new)
+                            Just t -> return (cenv, t)
+        freshType' nongen cenv (TArr t1 t2) = do
+            (cenv', t1') <- freshType' nongen cenv t1
+            (cenv'', t2') <- freshType' nongen cenv' t2
+            return (cenv'', TArr t1' t2')
+        freshType' _ cenv t = return (cenv, t)
 
-retrieve :: TyEnv -> Subst -> NonGenerics -> Id -> TyErr Type
-retrieve env subst nongen var =
-    case lookup var subst of
-        Nothing -> case lookup var env of
-                       Nothing -> throwError $ "unbound var: " ++ show var
-                       Just t  -> liftIO $ freshType nongen t
-        Just t -> return t
+--ti :: TyEnv -> NonGenerics -> Expr -> TyErr (Subst, Type)
+--ti env nongen (Var name) =
+--    case M.lookup name env of
+--        Nothing -> throwError $ "unbound var: " ++ name
+--        Just t  -> do
+--            fresh <- liftIO $ freshType nongen t
+--            return (nullSubst, t)
+--ti _ _ (Lit LitInt{})  = return (nullSubst, tInt)
+--ti _ _ (Lit LitChar{}) = return (nullSubst, tChar)
+--ti _ _ (Lit LitBool{}) = return (nullSubst, tBool)
+--ti env nongen (Ap e1 e2) = do
+--    (s1, e1ty) <- ti env nongen e1
+--    (s2, e2ty) <- ti (apply s1 env) nongen e2
+--    var <- liftIO newTyVar
+--    s <- mgu (apply s2 e1ty) (TArr e2ty (TVar var))
+--    return (s @@ s2 @@ s1, apply s (TVar var))
 
-analyzeExp :: TyEnv -> Subst -> NonGenerics -> Expr -> TyErr Type
-analyzeExp env subst nongen (Var name) = retrieve env subst nongen name
-analyzeExp _ _ _ (Lit LitInt{})  = return tInt
-analyzeExp _ _ _ (Lit LitChar{}) = return tChar
-analyzeExp _ _ _ (Lit LitStr{})  = return (TAp tList tChar)
-analyzeExp env subst nongen (Ap e1 e2) = do
-    funty <- analyzeExp env subst nongen e1
-    argty <- analyzeExp env subst nongen e2
-    res <- liftIO $ newTyVar Abs
-    unify subst funty (TAp (TAp tArrow argty) (TVar res))
+--ti env nongen (Let (LetBinding name e1) e2) = do
+--    (s1, t)  <- ti env nongen e1
+--    (s2, t2) <- ti (apply s1 (M.insert name t env)) nongen e2
+--    return (s2 @@ s1, t2)
 
---main :: IO ()
---main = do
-    --let exp1 = Ap (Var "a") (Var "a")
-    --ty <- runErrorT $ analyzeExp [] [] [] exp1
-    --putStrLn $ show ty
+----ti env nongen (Let (LambdaBinding name) e) = do
+--    --var <- liftIO newTyVar
+--    --(s, t) <- ti env (S.insert name nongen) e
+--    --return (s, TArr (apply s var)
+
+
