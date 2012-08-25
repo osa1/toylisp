@@ -103,6 +103,7 @@ data Expr = Var Id
           | Lit Literal
           | Ap Expr Expr
           | Let Bindings Expr
+          | If Expr Expr Expr
     deriving Show
 
 data Bindings = LetBinding String Expr
@@ -169,22 +170,22 @@ ti (TyEnv env) nongen (Let (LambdaBinding name) e) = do
     liftIO $ putStrLn $ show tyenv'
     (s1, t)  <- ti tyenv' (S.insert n nongen) e
     return (s1, apply s1 (TArr (TVar var) t))
+ti env nongen (If e1 e2 e3) = do
+    (s1, t1) <- ti env nongen e1
+    s1' <- mgu (apply s1 t1) tBool
+    (s2, t2) <- ti (apply s1' env) nongen e2
+    (s3, t3) <- ti (apply s1' env) nongen e3
+    s <- mgu (apply s2 t2) (apply s3 t3)
+    return (s, (apply s t2))
 
 main :: IO ()
 main = do
-    let env = TyEnv (M.fromList [("test", TArr tFloat tFloat), ("test2", TArr (TVar (TyVar "a")) (TVar (TyVar "a")))])
-    --let exp = Let (LetBinding "id" (Let (LambdaBinding "a") (Var "a")))
-    --              (Ap (Var "id") (Lit (LitInt 10)))
-    let exp = Ap (Let (LambdaBinding "a") (Var "a")) (Lit (LitInt 10))
-    --let exp = Let (LambdaBinding "a") (Var "a")
+    let env = TyEnv (M.fromList [ ("+", TArr tInt (TArr tInt tInt))
+                                , ("id", TArr (TVar (TyVar "a")) (TVar (TyVar "a")))
+                                ] )
+
+    let exp = If (Ap (Var "id") (Lit (LitBool True)))
+                 (Ap (Ap (Var "+") (Ap (Var "id") (Lit (LitInt 10)))) (Ap (Var "id") (Lit (LitInt 10))))
+                 (Lit (LitInt 123))
     ty <- runErrorT $ ti env S.empty exp
     putStrLn $ show ty
-
-
-    --putStrLn $ show (apply (M.fromList [("a", tInt)]) exp)
-    --ty <- runErrorT $ ti (TyEnv M.empty) S.empty exp
-
-
-
-
-
