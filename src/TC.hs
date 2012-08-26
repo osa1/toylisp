@@ -26,12 +26,15 @@ type TypeError = String
 --type TyErr = Either TypeError
 type TyErr = ErrorT TypeError IO
 
+type Id = String
+type TRecord = M.Map Id Type
+
 data Type = TVar TyVar     -- variable
           | TCon TyCon     -- constant
           | TArr Type Type -- arrow
+          | TRec TRecord   -- record
     deriving (Show, Eq)
 
-type Id = String
 
 data TyCon = TyCon Id
     deriving (Show, Eq)
@@ -67,12 +70,14 @@ instance Types Type where
     apply s (TVar (TyVar name)) = case M.lookup name s of
                            Just t -> t
                            Nothing -> TVar (TyVar name)
-    apply _ (TCon c)  = TCon c
+    apply _ (TCon c)   = TCon c
     apply s (TArr a b) = TArr (apply s a) (apply s b)
+    apply s (TRec ts)  = TRec (M.map (apply s) ts)
 
     tv (TVar u)  = S.singleton u
     tv TCon{}    = S.empty
     tv (TArr a b) = tv a `S.union` tv b
+    tv (TRec ts) = S.unions (map tv (M.elems ts))
 
 instance (Types a) => Types [a] where
     apply s = map (apply s)
@@ -87,6 +92,16 @@ mgu (TArr l r) (TArr l' r') = do
     s1 <- mgu l l'
     s2 <- mgu (apply s1 r) (apply s1 r')
     return (s2 @@ s1)
+mgu (TRec r1) (TRec r2) = do
+    let keys = M.keysSet r1 `S.intersection` M.keysSet r2
+    unifyVals (S.toList keys) nullSubst
+  where unifyVals :: [Id] -> Subst -> TyErr Subst
+        unifyVals [] substs = return substs
+        unifyVals (x:xs) subst = do
+            let (Just t1) = M.lookup x r1
+                (Just t2) = M.lookup x r2
+            subst' <- mgu (apply subst t1) (apply subst t2)
+            unifyVals xs (subst' @@ subst)
 mgu (TVar u) t = varBind u t
 mgu t (TVar u) = varBind u t
 mgu (TCon tc1) (TCon tc2) | tc1 == tc2 = return nullSubst
@@ -104,6 +119,8 @@ data Expr = Var Id
           | Ap Expr Expr
           | Let Bindings Expr
           | If Expr Expr Expr
+          | Rec [(Id, Expr)]
+          | Select Expr Id
     deriving Show
 
 data Bindings = LetBinding String Expr
@@ -145,6 +162,9 @@ retrieve (TyEnv env) nongen name =
           Just t -> liftIO $ freshType nongen t
           Nothing -> throwError $ "unbound var: " ++ name
 
+          -- | Rec [(Name, Expr)]
+          -- | Select Expr Id
+
 ti :: TyEnv -> NonGenerics -> Expr -> TyErr (Subst, Type)
 ti env nongen (Var name) = liftM ((,) nullSubst) (retrieve env nongen name)
 ti _ _ (Lit LitInt{})  = return (nullSubst, tInt)
@@ -176,7 +196,24 @@ ti env nongen (If e1 e2 e3) = do
     (s2, t2) <- ti (apply s1' env) nongen e2
     (s3, t3) <- ti (apply s1' env) nongen e3
     s <- mgu (apply s2 t2) (apply s3 t3)
-    return (s, (apply s t2))
+    return (s, apply s t2)
+
+ti env nongen (Rec elems) = do
+    (s, ts) <- collectTypes env nongen elems [] nullSubst
+    return (s, TRec $ M.fromList ts)
+  where collectTypes :: TyEnv -> NonGenerics -> [(Id, Expr)] -> [(String, Type)] -> Subst -> TyErr (Subst, [(String, Type)])
+        collectTypes env nongen ((name,expr):xs) r subst = do
+            (s, t) <- ti (apply subst env) nongen expr
+            collectTypes env nongen xs ((name,t):r) (s @@ subst)
+        collectTypes _ _ [] r s = return (s, r)
+
+ti env nongen (Select e id) = do
+    (s, t) <- ti env nongen e
+    var <- liftIO newTyVar
+    let r' = TRec (M.singleton id (TVar var))
+    s' <- mgu r' (apply s t)
+    return (s' @@ s, apply s' $ TVar var)
+
 
 main :: IO ()
 main = do
@@ -184,8 +221,21 @@ main = do
                                 , ("id", TArr (TVar (TyVar "a")) (TVar (TyVar "a")))
                                 ] )
 
-    let exp = If (Ap (Var "id") (Lit (LitBool True)))
-                 (Ap (Ap (Var "+") (Ap (Var "id") (Lit (LitInt 10)))) (Ap (Var "id") (Lit (LitInt 10))))
-                 (Lit (LitInt 123))
-    ty <- runErrorT $ ti env S.empty exp
-    putStrLn $ show ty
+    --let exp = If (Ap (Var "id") (Lit (LitBool True)))
+    --             (Ap (Ap (Var "+") (Ap (Var "id") (Lit (LitInt 10)))) (Ap (Var "id") (Lit (LitInt 10))))
+    --             (Lit (LitInt 123))
+    let exp = Let (LambdaBinding "a")
+                  (Rec [ ("a", (Lit (LitInt 10)))
+                       , ("b", (Var "+"))
+                       , ("c", (Ap (Ap (Var "+") (Var "a")) (Lit (LitInt 20))))
+                       , ("d", (Var "a"))
+                       ])
+    let exp2 = Ap exp (Lit (LitInt 20))
+    --let exp3 = Select exp2 "d"
+    let exp3 = Ap (Ap (Var "+") (Select exp2 "b")) (Lit (LitInt 20))
+
+
+    ty <- runErrorT $ ti env S.empty exp3
+    putStrLn $ show (liftM fst ty)
+    putStrLn $ show (liftM snd ty)
+
